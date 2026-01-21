@@ -42,7 +42,15 @@ $(foreach t,$(INTERNAL_TESTS),$(eval $(call INTERNAL_TEST_RULE,$(t))))
 $(BIN_DIR)/%.out: $(TEST_DIR)/%.c $(LIB_NAME) $(LAH_DIR)/Lib/liblah.so | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $@ $< $(TEST_LD)
 
-.PHONY: all test lib clean format tests-output.txt
+# Benchmark
+BENCH_DIR   := $(SR_DIR)/benchmark
+BENCH_SRC   := $(BENCH_DIR)/benchmark.c
+BENCH_BIN   := $(BIN_DIR)/benchmark.out
+
+$(BENCH_BIN): $(BENCH_SRC) $(LIB_NAME) | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(TEST_LD)
+
+.PHONY: all test lib clean format tests-output.txt bench
 all: lib test
 
 lib: $(LIB_NAME)
@@ -72,6 +80,9 @@ test: $(TEST_BINS)
 	done
 	@echo "All tests passed."
 
+bench: $(BENCH_BIN)
+	$(BENCH_BIN)
+
 clean:
-	rm -f $(LIB_NAME) $(TEST_BINS)
+	rm -f $(LIB_NAME) $(TEST_BINS) $(BENCH_BIN)
 	rmdir --ignore-fail-on-non-empty $(BIN_DIR)
