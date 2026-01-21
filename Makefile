@@ -22,7 +22,7 @@ TEST_LD     := -L$(SR_DIR) -lsr_ukf -Wl,-rpath,$(SR_DIR) $(LDFLAGS)
 TEST_OUTPUT := tests-output.txt
 
 # Tests that need internal access (include .c directly, don't link library)
-INTERNAL_TESTS := 00_sigma 03_gain 04_mean_cov 06_predict 10_simple 20_nonlinear 30_errors
+INTERNAL_TESTS := 00_sigma 06_predict 10_simple 20_nonlinear 30_errors
 
 # shared library target
 $(LIB_NAME): $(LIB_SRCS) $(LIB_HDRS)

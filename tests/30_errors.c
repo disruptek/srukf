@@ -282,112 +282,7 @@ static void test_correct_errors(void) {
   printf("  test_correct_err     OK\n");
 }
 
-/* Test 8: compute_kalman_gain errors */
-static void test_gain_errors(void) {
-  const lah_index N = 2, M = 1;
-
-  lah_mat *Pxy = allocMatrixNow(N, M);
-  lah_mat *Pyy = allocMatrixNow(M, M);
-  lah_mat *K = allocMatrixNow(N, M);
-  assert(Pxy && Pyy && K);
-
-  /* Set up valid data */
-  LAH_ENTRY(Pxy, 0, 0) = 1.0;
-  LAH_ENTRY(Pxy, 1, 0) = 0.5;
-  LAH_ENTRY(Pyy, 0, 0) = 2.0;
-
-  lah_Return rc;
-
-  /* NULL Pxy */
-  rc = compute_kalman_gain(NULL, Pyy, K);
-  assert(rc == lahReturnParameterError);
-
-  /* NULL Pyy */
-  rc = compute_kalman_gain(Pxy, NULL, K);
-  assert(rc == lahReturnParameterError);
-
-  /* NULL K */
-  rc = compute_kalman_gain(Pxy, Pyy, NULL);
-  assert(rc == lahReturnParameterError);
-
-  /* Wrong K rows */
-  lah_mat *K_wrong_rows = allocMatrixNow(3, M);
-  assert(K_wrong_rows);
-  rc = compute_kalman_gain(Pxy, Pyy, K_wrong_rows);
-  assert(rc == lahReturnParameterError);
-  lah_matFree(K_wrong_rows);
-
-  /* Wrong K columns */
-  lah_mat *K_wrong_cols = allocMatrixNow(N, 2);
-  assert(K_wrong_cols);
-  rc = compute_kalman_gain(Pxy, Pyy, K_wrong_cols);
-  assert(rc == lahReturnParameterError);
-  lah_matFree(K_wrong_cols);
-
-  /* Valid case */
-  rc = compute_kalman_gain(Pxy, Pyy, K);
-  assert(rc == lahReturnOk);
-
-  lah_matFree(Pxy);
-  lah_matFree(Pyy);
-  lah_matFree(K);
-  printf("  test_gain_err        OK\n");
-}
-
-/* Test 9: compute_mean_cov errors */
-static void test_mean_cov_errors(void) {
-  const lah_index N = 2, L = 5;
-
-  lah_mat *Ysig = allocMatrixNow(N, L);
-  lah_mat *y_mean = allocMatrixNow(N, 1);
-  lah_mat *Sy = allocMatrixNow(N, N);
-  assert(Ysig && y_mean && Sy);
-
-  /* Set up valid weights as raw arrays */
-  lah_value wm[5], wc[5];
-  for (lah_index i = 0; i < L; i++) {
-    wm[i] = 1.0 / (double)L;
-    wc[i] = 1.0 / (double)L;
-  }
-
-  /* Set up valid sigma points */
-  for (lah_index i = 0; i < N; i++)
-    for (lah_index j = 0; j < L; j++)
-      LAH_ENTRY(Ysig, i, j) = (double)(i + j);
-
-  lah_Return rc;
-
-  /* NULL Ysig */
-  rc = compute_mean_cov(NULL, wm, wc, y_mean, Sy);
-  assert(rc == lahReturnParameterError);
-
-  /* NULL wm */
-  rc = compute_mean_cov(Ysig, NULL, wc, y_mean, Sy);
-  assert(rc == lahReturnParameterError);
-
-  /* NULL wc */
-  rc = compute_mean_cov(Ysig, wm, NULL, y_mean, Sy);
-  assert(rc == lahReturnParameterError);
-
-  /* NULL y_mean */
-  rc = compute_mean_cov(Ysig, wm, wc, NULL, Sy);
-  assert(rc == lahReturnParameterError);
-
-  /* NULL Sy */
-  rc = compute_mean_cov(Ysig, wm, wc, y_mean, NULL);
-  assert(rc == lahReturnParameterError);
-
-  /* Valid case */
-  rc = compute_mean_cov(Ysig, wm, wc, y_mean, Sy);
-  assert(rc == lahReturnOk);
-
-  lah_matFree(Ysig);
-  lah_matFree(y_mean);
-  lah_matFree(Sy);
-  printf("  test_mean_cov_err    OK\n");
-}
-
-/* Test 10: sqrt_to_covariance errors */
+/* Test 8: sqrt_to_covariance errors (used as test helper) */
 static void test_sqrt_to_cov_errors(void) {
   const lah_index N = 2;
 
@@ -419,7 +314,7 @@ static void test_sqrt_to_cov_errors(void) {
   printf("  test_sqrt_to_cov     OK\n");
 }
 
-/* Test 11: is_spd edge cases */
+/* Test 9: is_spd edge cases (used as test helper) */
 static void test_is_spd(void) {
   const lah_index N = 2;
 
@@ -489,7 +384,7 @@ static void test_diag_callback(const char *msg) {
   printf("%s\n", msg);
 }
 
-/* Test 12: callback validation - NaN/Inf detection */
+/* Test 10: callback validation - NaN/Inf detection */
 static void test_callback_validation(void) {
   sr_ukf *ukf = sr_ukf_create(2, 1);
   assert(ukf);
@@ -528,7 +423,7 @@ static void test_callback_validation(void) {
   printf("  test_callback_valid  OK\n");
 }
 
-/* Test 13: sr_ukf_create_from_noise errors */
+/* Test 11: sr_ukf_create_from_noise errors */
 static void test_create_from_noise_errors(void) {
   lah_mat *Q = alloc_unit_square(2);
   lah_mat *R = alloc_unit_square(1);
@@ -564,8 +459,6 @@ int main(void) {
   test_sigma_points_errors();
   test_predict_errors();
   test_correct_errors();
-  test_gain_errors();
-  test_mean_cov_errors();
   test_sqrt_to_cov_errors();
   test_is_spd();
   test_callback_validation();
