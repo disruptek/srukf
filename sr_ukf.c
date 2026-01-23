@@ -285,8 +285,10 @@ static lah_Return sr_ukf_compute_weights(sr_ukf *ukf, const lah_index n) {
 
   /* Common denominator for all weights */
   const lah_value denom = (lah_value)n + ukf->lambda;
-  if (fabs(denom) < SR_UKF_EPS) /* safeguard against division by zero */
+  if (fabs(denom) < SR_UKF_EPS) { /* safeguard against division by zero */
+    diag_report("compute_weights: denominator too small (n + lambda ≈ 0)");
     return lahReturnMathError;
+  }
 
   /* Mean weights: wm[0] = λ / (n+λ), wm[i>0] = 1/(2(n+λ)) */
   for (lah_index i = 0; i < n_sigma; ++i)
@@ -572,8 +574,10 @@ static lah_Return generate_sigma_points_from(const lah_mat *x, const lah_mat *S,
 
   /* scaling factor γ = sqrt( N + λ ) */
   lah_value gamma = sqrt((lah_value)n + lambda);
-  if (gamma <= 0.0)
+  if (gamma <= 0.0) {
+    diag_report("generate_sigma_points: gamma <= 0 (N + lambda <= 0)");
     return lahReturnMathError;
+  }
 
   /* 1st column = mean state */
   for (lah_index i = 0; i < n; ++i)
@@ -831,8 +835,10 @@ static lah_Return sr_ukf_sqrt_from_deviations_ex(const lah_mat *Dev,
   int info = GEQRF(LAH_LAPACK_LAYOUT, (int)n_rows, (int)dim, work->data,
                    (int)LAH_LEADING_DIM(work), tau);
   free(tau);
-  if (info != 0)
+  if (info != 0) {
+    diag_report("QR factorization (GEQRF) failed");
     return lahReturnMathError;
+  }
 
   /* Extract R' (transpose of upper triangular R) into S as lower triangular */
   for (lah_index i = 0; i < dim; ++i) {
@@ -980,12 +986,16 @@ sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
 
   /* --- Generate and propagate sigma points ------------------------ */
   ret = generate_sigma_points_from(x_in, S_in, ukf->lambda, Xsig);
-  if (ret != lahReturnOk)
+  if (ret != lahReturnOk) {
+    diag_report("predict: sigma point generation failed");
     return ret;
+  }
 
   ret = propagate_sigma_points(Xsig, Ysig, f, user);
-  if (ret != lahReturnOk)
+  if (ret != lahReturnOk) {
+    diag_report("predict: sigma point propagation failed");
     return ret;
+  }
 
   /* --- Validate callback output ----------------------------------- */
   if (!is_numeric_valid(Ysig)) {
@@ -995,13 +1005,17 @@ sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
 
   /* --- Compute weighted mean --------------------------------------- */
   ret = compute_weighted_mean(Ysig, ukf->wm, x_mean);
-  if (ret != lahReturnOk)
+  if (ret != lahReturnOk) {
+    diag_report("predict: compute_weighted_mean failed");
     return ret;
+  }
 
   /* --- Compute weighted deviations --------------------------------- */
   ret = compute_weighted_deviations(Ysig, x_mean, ukf->wc, Dev);
-  if (ret != lahReturnOk)
+  if (ret != lahReturnOk) {
+    diag_report("predict: compute_weighted_deviations failed");
     return ret;
+  }
 
   /* --- Compute S via QR of [Dev'; Qsqrt'] -------------------------- */
   /* Handle potential negative wc[0] (for alpha < 1) */
@@ -1020,8 +1034,10 @@ sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
                                         wc0_negative, dev0);
   if (dev0)
     free(dev0);
-  if (ret != lahReturnOk)
+  if (ret != lahReturnOk) {
+    diag_report("predict: sqrt_from_deviations (QR/downdate) failed");
     return ret;
+  }
 
   /* --- Write mean → x_out ---------------------------------------- */
   memcpy(x_out->data, x_mean->data, N * sizeof(lah_value));
