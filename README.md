@@ -344,6 +344,20 @@ void srukf_set_diag_callback(srukf_diag_fn fn);
 - **Noise matrices must be square-roots**. Provide S where P = S*S', not P directly.
 - **Column-major layout**. All matrices must be in column-major (Fortran) order.
 
+## Documentation
+
+Full API documentation with algorithm explanations is available at:
+**https://disruptek.github.io/srukf/**
+
+The docs include:
+- Intuitive explanations of the Unscented Transform and sigma points
+- Why square-root formulation provides numerical stability
+- Detailed algorithm walkthroughs for predict and correct steps
+- Tuning parameter guide (α, β, κ)
+- Complete API reference with examples
+
+Generate locally with `make docs` (requires [Doxygen](https://www.doxygen.nl/)).
+
 ## Acknowledgments
 
 Matrix utilities derived from [LAH](https://github.com/maj0e/LAH) by maj0e (MIT License).
