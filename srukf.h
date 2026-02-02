@@ -177,7 +177,7 @@
  * @section attribution_sec Attribution
  *
  * Matrix utilities derived from LAH (Linear Algebra Helpers) by maj0e,
- * MIT License. See https://github.com/maj0e/lah
+ * MIT License. See https://github.com/maj0e/linear-algebra-helpers
  *
  * @section references_sec References
  *

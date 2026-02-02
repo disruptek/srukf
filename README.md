@@ -360,7 +360,7 @@ Generate locally with `make docs` (requires [Doxygen](https://www.doxygen.nl/)).
 
 ## Acknowledgments
 
-Matrix utilities derived from [LAH](https://github.com/maj0e/LAH) by maj0e (MIT License).
+Matrix utilities derived from [LAH](https://github.com/maj0e/linear-algebra-helpers) by maj0e (MIT License).
 
 ## License
 
