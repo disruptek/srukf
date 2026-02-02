@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------
- * 05_correct.c - Correction step tests for sr_ukf_correct
+ * 05_correct.c - Correction step tests for srukf_correct
  *
  * Tests the measurement update (correction) step with various scenarios:
  * - Basic correction with known expected values
@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "sr_ukf.h"
+#include "srukf.h"
 #include <lah.h>
 
 #define EPS 1e-6
@@ -62,7 +62,7 @@ static void test_basic_correction(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* Set initial state to [0, 0] with identity covariance */
@@ -81,7 +81,7 @@ static void test_basic_correction(void) {
   /* Save prior covariance trace */
   double prior_trace = covariance_trace(ukf->S);
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should move toward measurement */
@@ -95,7 +95,7 @@ static void test_basic_correction(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_basic_correction OK\n");
 }
 
@@ -110,7 +110,7 @@ static void test_sequential_corrections(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* Initial state far from true value */
@@ -127,7 +127,7 @@ static void test_sequential_corrections(void) {
   /* Run multiple corrections */
   double prev_error = INFINITY;
   for (int iter = 0; iter < 10; iter++) {
-    lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+    lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
     assert(rc == lahReturnOk);
 
     double err0 = LAH_ENTRY(ukf->x, 0, 0) - 1.0;
@@ -146,7 +146,7 @@ static void test_sequential_corrections(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_sequential_corrections OK\n");
 }
 
@@ -161,7 +161,7 @@ static void test_zero_measurement(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   LAH_ENTRY(ukf->x, 0, 0) = 5.0;
@@ -174,7 +174,7 @@ static void test_zero_measurement(void) {
   LAH_ENTRY(z, 0, 0) = 0.0;
   LAH_ENTRY(z, 1, 0) = 0.0;
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should move toward zero */
@@ -188,7 +188,7 @@ static void test_zero_measurement(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_zero_measurement OK\n");
 }
 
@@ -203,7 +203,7 @@ static void test_large_measurement(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   LAH_ENTRY(ukf->x, 0, 0) = 0.0;
@@ -216,7 +216,7 @@ static void test_large_measurement(void) {
   LAH_ENTRY(z, 0, 0) = 1e6;
   LAH_ENTRY(z, 1, 0) = 1e6;
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should move toward large values */
@@ -233,7 +233,7 @@ static void test_large_measurement(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_large_measurement OK\n");
 }
 
@@ -248,7 +248,7 @@ static void test_high_measurement_noise(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 100.0; /* Very high measurement noise */
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   LAH_ENTRY(ukf->x, 0, 0) = 0.0;
@@ -263,7 +263,7 @@ static void test_high_measurement_noise(void) {
   LAH_ENTRY(z, 0, 0) = 100.0;
   LAH_ENTRY(z, 1, 0) = 100.0;
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* With high measurement noise, state should barely change */
@@ -275,7 +275,7 @@ static void test_high_measurement_noise(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_high_meas_noise OK\n");
 }
 
@@ -290,7 +290,7 @@ static void test_low_measurement_noise(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.001; /* Very low measurement noise */
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   LAH_ENTRY(ukf->x, 0, 0) = 0.0;
@@ -302,7 +302,7 @@ static void test_low_measurement_noise(void) {
   LAH_ENTRY(z, 0, 0) = 5.0;
   LAH_ENTRY(z, 1, 0) = 5.0;
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* With low measurement noise, state should jump close to measurement */
@@ -312,7 +312,7 @@ static void test_low_measurement_noise(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_low_meas_noise  OK\n");
 }
 
@@ -326,7 +326,7 @@ static void test_partial_observability(void) {
     LAH_ENTRY(Qsqrt, i, i) = 0.1;
   LAH_ENTRY(Rsqrt, 0, 0) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* Initial state [1, 2, 3] */
@@ -340,7 +340,7 @@ static void test_partial_observability(void) {
   lah_mat *z = allocMatrixNow(M, 1);
   LAH_ENTRY(z, 0, 0) = 10.0; /* Measured sum */
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_sum, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_sum, NULL);
   assert(rc == lahReturnOk);
 
   /* All states should be updated (sum measurement couples all) */
@@ -352,7 +352,7 @@ static void test_partial_observability(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_partial_obs     OK\n");
 }
 
@@ -365,7 +365,7 @@ static void test_1d(void) {
   LAH_ENTRY(Qsqrt, 0, 0) = 0.1;
   LAH_ENTRY(Rsqrt, 0, 0) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   LAH_ENTRY(ukf->x, 0, 0) = 0.0;
@@ -376,7 +376,7 @@ static void test_1d(void) {
 
   double prior_var = LAH_ENTRY(ukf->S, 0, 0) * LAH_ENTRY(ukf->S, 0, 0);
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should move toward measurement */
@@ -390,7 +390,7 @@ static void test_1d(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_1d              OK\n");
 }
 
@@ -405,7 +405,7 @@ static void test_5d(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* Set non-trivial initial state */
@@ -420,7 +420,7 @@ static void test_5d(void) {
 
   double prior_trace = covariance_trace(ukf->S);
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* All values should be finite */
@@ -437,7 +437,7 @@ static void test_5d(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_5d              OK\n");
 }
 
@@ -452,7 +452,7 @@ static void test_no_innovation(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* State is [2, 3] */
@@ -470,7 +470,7 @@ static void test_no_innovation(void) {
   double x0_prior = LAH_ENTRY(ukf->x, 0, 0);
   double x1_prior = LAH_ENTRY(ukf->x, 1, 0);
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should stay close to prior (measurement matches prediction) */
@@ -480,7 +480,7 @@ static void test_no_innovation(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_no_innovation   OK\n");
 }
 
@@ -495,7 +495,7 @@ static void test_covariance_reduction(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.2;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   LAH_ENTRY(ukf->S, 0, 0) = 2.0;
@@ -513,7 +513,7 @@ static void test_covariance_reduction(void) {
     LAH_ENTRY(z, 0, 0) = (double)(iter + 1);
     LAH_ENTRY(z, 1, 0) = (double)(iter + 2);
 
-    lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+    lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
     assert(rc == lahReturnOk);
 
     double post_trace = covariance_trace(ukf->S);
@@ -524,7 +524,7 @@ static void test_covariance_reduction(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_cov_reduction   OK\n");
 }
 
@@ -534,7 +534,7 @@ static void test_error_null_filter(void) {
   LAH_ENTRY(z, 0, 0) = 1.0;
   LAH_ENTRY(z, 1, 0) = 1.0;
 
-  lah_Return rc = sr_ukf_correct(NULL, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(NULL, z, meas_identity, NULL);
   assert(rc == lahReturnParameterError);
 
   lah_matFree(z);
@@ -552,15 +552,15 @@ static void test_error_null_measurement(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
-  lah_Return rc = sr_ukf_correct(ukf, NULL, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, NULL, meas_identity, NULL);
   assert(rc == lahReturnParameterError);
 
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_err_null_meas   OK\n");
 }
 
@@ -575,20 +575,20 @@ static void test_error_null_meas_func(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   lah_mat *z = allocMatrixNow(M, 1);
   LAH_ENTRY(z, 0, 0) = 1.0;
   LAH_ENTRY(z, 1, 0) = 1.0;
 
-  lah_Return rc = sr_ukf_correct(ukf, z, NULL, NULL);
+  lah_Return rc = srukf_correct(ukf, z, NULL, NULL);
   assert(rc == lahReturnParameterError);
 
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_err_null_func   OK\n");
 }
 
@@ -605,14 +605,14 @@ static void test_original(void) {
   LAH_ENTRY(Rsqrt, 0, 0) = 0.2;
   LAH_ENTRY(Rsqrt, 1, 1) = 0.2;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   lah_mat *z = allocMatrixNow(M, 1);
   LAH_ENTRY(z, 0, 0) = 0.1;
   LAH_ENTRY(z, 1, 0) = 0.2;
 
-  lah_Return rc = sr_ukf_correct(ukf, z, meas_identity, NULL);
+  lah_Return rc = srukf_correct(ukf, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* Basic sanity checks */
@@ -620,7 +620,7 @@ static void test_original(void) {
   assert(isfinite(LAH_ENTRY(ukf->x, 1, 0)));
   assert(isfinite(LAH_ENTRY(ukf->x, 2, 0)));
 
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
@@ -638,7 +638,7 @@ static void test_correct_to(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* Set initial state */
@@ -669,7 +669,7 @@ static void test_correct_to(void) {
 
   /* Call transactional API */
   lah_Return rc =
-      sr_ukf_correct_to(ukf, x_user, S_user, z, meas_identity, NULL);
+      srukf_correct_to(ukf, x_user, S_user, z, meas_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* Filter state should be unchanged */
@@ -692,7 +692,7 @@ static void test_correct_to(void) {
   lah_matFree(z);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_correct_to      OK\n");
 }
 
@@ -707,7 +707,7 @@ static void test_correct_to_chaining(void) {
   for (lah_index i = 0; i < M; i++)
     LAH_ENTRY(Rsqrt, i, i) = 0.1;
 
-  sr_ukf *ukf = sr_ukf_create_from_noise(Qsqrt, Rsqrt);
+  srukf *ukf = srukf_create_from_noise(Qsqrt, Rsqrt);
   assert(ukf);
 
   /* Set initial state with large uncertainty */
@@ -750,7 +750,7 @@ static void test_correct_to_chaining(void) {
         LAH_ENTRY(S_test, k, l) = LAH_ENTRY(ukf->S, k, l);
     }
 
-    lah_Return rc = sr_ukf_correct_to(ukf, x_test, S_test, measurements[i],
+    lah_Return rc = srukf_correct_to(ukf, x_test, S_test, measurements[i],
                                       meas_identity, NULL);
     assert(rc == lahReturnOk);
 
@@ -778,12 +778,12 @@ static void test_correct_to_chaining(void) {
   lah_matFree(z3);
   lah_matFree(Qsqrt);
   lah_matFree(Rsqrt);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_correct_to_chain OK\n");
 }
 
 int main(void) {
-  printf("Running sr_ukf_correct tests...\n");
+  printf("Running srukf_correct tests...\n");
 
   test_basic_correction();
   test_sequential_corrections();

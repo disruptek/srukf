@@ -4,15 +4,15 @@
  * Tests generate_sigma_points_from with various dimensions and
  * parameter configurations.
  *
- * This test includes sr_ukf.c directly to access internal functions.
+ * This test includes srukf.c directly to access internal functions.
  * -------------------------------------------------------------------- */
 
-#include "sr_ukf.c"
+#include "srukf.c"
 
 #define EPS 1e-12
 
 /* Helper: verify sigma points structure */
-static void verify_sigma_points(sr_ukf *f, lah_mat *Xsig) {
+static void verify_sigma_points(srukf *f, lah_mat *Xsig) {
   lah_index N = f->x->nR;
   lah_value gamma = sqrt((lah_value)N + f->lambda);
 
@@ -44,7 +44,7 @@ static void verify_sigma_points(sr_ukf *f, lah_mat *Xsig) {
 
 /* Test 1: Basic 3D case (original test) */
 static void test_basic_3d(void) {
-  sr_ukf *f = sr_ukf_create(3, 2);
+  srukf *f = srukf_create(3, 2);
   assert(f && f->x && f->S);
 
   /* Set state */
@@ -57,7 +57,7 @@ static void test_basic_3d(void) {
     for (lah_index j = 0; j < 3; j++)
       LAH_ENTRY(f->S, i, j) = (i == j) ? 0.1 : 0.0;
 
-  sr_ukf_set_scale(f, 1e-3, 2.0, 0.0);
+  srukf_set_scale(f, 1e-3, 2.0, 0.0);
 
   lah_mat *Xsig = allocMatrixNow(3, 7); /* N=3, 2N+1=7 */
   assert(Xsig);
@@ -67,19 +67,19 @@ static void test_basic_3d(void) {
   verify_sigma_points(f, Xsig);
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_basic_3d      OK\n");
 }
 
 /* Test 2: Minimal 1D case */
 static void test_1d(void) {
-  sr_ukf *f = sr_ukf_create(1, 1);
+  srukf *f = srukf_create(1, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 5.0;
   LAH_ENTRY(f->S, 0, 0) = 0.5;
 
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_mat *Xsig = allocMatrixNow(1, 3); /* N=1, 2N+1=3 */
   assert(Xsig);
@@ -95,14 +95,14 @@ static void test_1d(void) {
   assert(fabs(LAH_ENTRY(Xsig, 0, 2) - (5.0 - gamma * 0.5)) < EPS);
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_1d            OK\n");
 }
 
 /* Test 3: Higher dimension (10D) */
 static void test_10d(void) {
   lah_index N = 10;
-  sr_ukf *f = sr_ukf_create((int)N, 5);
+  srukf *f = srukf_create((int)N, 5);
   assert(f);
 
   /* Set state to [1, 2, 3, ..., 10] */
@@ -114,7 +114,7 @@ static void test_10d(void) {
     for (lah_index j = 0; j < N; j++)
       LAH_ENTRY(f->S, i, j) = (i == j) ? 0.1 * (i + 1) : 0.0;
 
-  sr_ukf_set_scale(f, 0.5, 2.0, 1.0);
+  srukf_set_scale(f, 0.5, 2.0, 1.0);
 
   lah_mat *Xsig = allocMatrixNow(N, 2 * N + 1);
   assert(Xsig);
@@ -128,13 +128,13 @@ static void test_10d(void) {
   assert(Xsig->nC == 2 * N + 1);
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_10d           OK\n");
 }
 
 /* Test 4: Zero state */
 static void test_zero_state(void) {
-  sr_ukf *f = sr_ukf_create(3, 1);
+  srukf *f = srukf_create(3, 1);
   assert(f);
 
   /* State is zero */
@@ -146,7 +146,7 @@ static void test_zero_state(void) {
     for (lah_index j = 0; j < 3; j++)
       LAH_ENTRY(f->S, i, j) = (i == j) ? 1.0 : 0.0;
 
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_mat *Xsig = allocMatrixNow(3, 7);
   assert(Xsig);
@@ -160,13 +160,13 @@ static void test_zero_state(void) {
     assert(fabs(LAH_ENTRY(Xsig, i, 0)) < EPS);
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_zero_state    OK\n");
 }
 
 /* Test 5: Different alpha values */
 static void test_alpha_variations(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 1.0;
@@ -180,31 +180,31 @@ static void test_alpha_variations(void) {
   assert(Xsig);
 
   /* Test with small alpha (tight spread) */
-  sr_ukf_set_scale(f, 1e-3, 2.0, 0.0);
+  srukf_set_scale(f, 1e-3, 2.0, 0.0);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
          lahReturnOk);
   verify_sigma_points(f, Xsig);
 
   /* Test with alpha = 1 (standard spread) */
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
          lahReturnOk);
   verify_sigma_points(f, Xsig);
 
   /* Test with larger alpha */
-  sr_ukf_set_scale(f, 2.0, 2.0, 0.0);
+  srukf_set_scale(f, 2.0, 2.0, 0.0);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
          lahReturnOk);
   verify_sigma_points(f, Xsig);
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_alpha_var     OK\n");
 }
 
 /* Test 6: Non-diagonal S (correlated states) */
 static void test_correlated_states(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 0.0;
@@ -216,7 +216,7 @@ static void test_correlated_states(void) {
   LAH_ENTRY(f->S, 1, 0) = 0.5;   /* correlation */
   LAH_ENTRY(f->S, 1, 1) = 0.866; /* sqrt(1 - 0.5^2) */
 
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_mat *Xsig = allocMatrixNow(2, 5);
   assert(Xsig);
@@ -226,13 +226,13 @@ static void test_correlated_states(void) {
   verify_sigma_points(f, Xsig);
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_correlated    OK\n");
 }
 
 /* Test 7: Large scale differences */
 static void test_scale_differences(void) {
-  sr_ukf *f = sr_ukf_create(3, 1);
+  srukf *f = srukf_create(3, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 1e6;  /* large */
@@ -244,7 +244,7 @@ static void test_scale_differences(void) {
   LAH_ENTRY(f->S, 1, 1) = 0.1;
   LAH_ENTRY(f->S, 2, 2) = 1e-9;
 
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_mat *Xsig = allocMatrixNow(3, 7);
   assert(Xsig);
@@ -259,13 +259,13 @@ static void test_scale_differences(void) {
       assert(isfinite(LAH_ENTRY(Xsig, i, j)));
 
   lah_matFree(Xsig);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_scale_diff    OK\n");
 }
 
 /* Test 8: Error cases */
 static void test_errors(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   /* NULL Xsig */
@@ -283,7 +283,7 @@ static void test_errors(void) {
          lahReturnParameterError);
   lah_matFree(Xsig_wrong);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_errors        OK\n");
 }
 

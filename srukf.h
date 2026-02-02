@@ -1,5 +1,5 @@
-#ifndef _SR_UKF_H_
-#define _SR_UKF_H_
+#ifndef _SRUKF_H_
+#define _SRUKF_H_
 
 #include <assert.h>
 #include <stdbool.h>
@@ -7,8 +7,8 @@
 
 #include <lah.h>
 
-/* Forward declaration for workspace (opaque, defined in sr_ukf.c) */
-typedef struct sr_ukf_workspace sr_ukf_workspace;
+/* Forward declaration for workspace (opaque, defined in srukf.c) */
+typedef struct srukf_workspace srukf_workspace;
 
 /* Square‑Root Unscented Kalman Filter (SR‑UKF) */
 typedef struct {
@@ -34,59 +34,59 @@ typedef struct {
 
   /* Workspace for temporary allocations (allocated on demand, NULL initially).
    * Not part of filter state - excluded from serialization. */
-  sr_ukf_workspace *ws;
-} sr_ukf;
+  srukf_workspace *ws;
+} srukf;
 
 /*-------------------- Diagnostics --------------------------------*/
 /* Callback type for diagnostic messages (e.g., fallback activations).
  * Set to NULL (default) to disable diagnostics. */
-typedef void (*sr_ukf_diag_fn)(const char *msg);
+typedef void (*srukf_diag_fn)(const char *msg);
 
 /* Set global diagnostic callback. Pass NULL to disable. */
-void sr_ukf_set_diag_callback(sr_ukf_diag_fn fn);
+void srukf_set_diag_callback(srukf_diag_fn fn);
 
 /*-------------------- Creation / destruction ---------------------*/
 /* Allocate a filter using the noise square‑root matrices. */
-sr_ukf *sr_ukf_create_from_noise(const lah_mat *Qsqrt, const lah_mat *Rsqrt);
+srukf *srukf_create_from_noise(const lah_mat *Qsqrt, const lah_mat *Rsqrt);
 
 /* Allocate a filter with uninitialized noise matrices. */
-sr_ukf *sr_ukf_create(int N /* states */, int M /* measurements */);
+srukf *srukf_create(int N /* states */, int M /* measurements */);
 
 /* Free all memory allocated for the filter. */
-void sr_ukf_free(sr_ukf *ukf);
+void srukf_free(srukf *ukf);
 
 /*-------------------- Initialization -------------------------------*/
 /* Set the filter's noise square‑root covariance matrices. */
-lah_Return sr_ukf_set_noise(sr_ukf *ukf, const lah_mat *Qsqrt,
-                            const lah_mat *Rsqrt);
+lah_Return srukf_set_noise(srukf *ukf, const lah_mat *Qsqrt,
+                           const lah_mat *Rsqrt);
 
 /* Set the filter's scaling parameters (α, β, κ). */
-lah_Return sr_ukf_set_scale(sr_ukf *ukf, lah_value alpha, lah_value beta,
-                            lah_value kappa);
+lah_Return srukf_set_scale(srukf *ukf, lah_value alpha, lah_value beta,
+                           lah_value kappa);
 
 /*-------------------- Dimension accessors ----------------------------*/
 /* Return the state dimension N. Returns 0 if ukf is NULL or invalid. */
-lah_index sr_ukf_state_dim(const sr_ukf *ukf);
+lah_index srukf_state_dim(const srukf *ukf);
 
 /* Return the measurement dimension M. Returns 0 if ukf is NULL or invalid. */
-lah_index sr_ukf_meas_dim(const sr_ukf *ukf);
+lah_index srukf_meas_dim(const srukf *ukf);
 
 /*-------------------- Core operations ------------------------------*/
 /* Predict step: propagate the current state through the process
    model f(x,u).  The function must accept a pointer to the current
    state (N×1) and return the propagated state.
    Safe: on error, filter state is unchanged. */
-lah_Return sr_ukf_predict(sr_ukf *ukf,
-                          void (*f)(const lah_mat *, lah_mat *, void *),
-                          void *user);
+lah_Return srukf_predict(srukf *ukf,
+                         void (*f)(const lah_mat *, lah_mat *, void *),
+                         void *user);
 
 /* Correct step: incorporate measurement z.
    The measurement model h(x,u) must accept a pointer to the state
    vector and return the predicted measurement vector.
    Safe: on error, filter state is unchanged. */
-lah_Return sr_ukf_correct(sr_ukf *ukf, lah_mat *z,
-                          void (*h)(const lah_mat *, lah_mat *, void *),
-                          void *user);
+lah_Return srukf_correct(srukf *ukf, lah_mat *z,
+                         void (*h)(const lah_mat *, lah_mat *, void *),
+                         void *user);
 
 /*-------------------- Transactional operations ---------------------*/
 /* These _to variants operate in-place on user-provided x/S buffers.
@@ -96,23 +96,23 @@ lah_Return sr_ukf_correct(sr_ukf *ukf, lah_mat *z,
    On error, x/S may be partially modified (caller's responsibility). */
 
 /* Transactional predict: operates in-place on user-provided x/S. */
-lah_Return sr_ukf_predict_to(sr_ukf *ukf, lah_mat *x, lah_mat *S,
-                             void (*f)(const lah_mat *, lah_mat *, void *),
-                             void *user);
+lah_Return srukf_predict_to(srukf *ukf, lah_mat *x, lah_mat *S,
+                            void (*f)(const lah_mat *, lah_mat *, void *),
+                            void *user);
 
 /* Transactional correct: operates in-place on user-provided x/S. */
-lah_Return sr_ukf_correct_to(sr_ukf *ukf, lah_mat *x, lah_mat *S, lah_mat *z,
-                             void (*h)(const lah_mat *, lah_mat *, void *),
-                             void *user);
+lah_Return srukf_correct_to(srukf *ukf, lah_mat *x, lah_mat *S, lah_mat *z,
+                            void (*h)(const lah_mat *, lah_mat *, void *),
+                            void *user);
 
 /*-------------------- Workspace management (optional) --------------*/
 /* Pre-allocate workspace. Called automatically on first predict/correct.
    Returns lahReturnOk on success, error if allocation fails. */
-lah_Return sr_ukf_alloc_workspace(sr_ukf *ukf);
+lah_Return srukf_alloc_workspace(srukf *ukf);
 
-/* Free workspace to reclaim memory. Called automatically by sr_ukf_free.
+/* Free workspace to reclaim memory. Called automatically by srukf_free.
    Safe to call multiple times or on NULL workspace. */
-void sr_ukf_free_workspace(sr_ukf *ukf);
+void srukf_free_workspace(srukf *ukf);
 
 /* NOTE: A common error here is to assume the function signature
  * matAlloc(rows, columns, ...) when it is actually
@@ -130,4 +130,4 @@ void sr_ukf_free_workspace(sr_ukf *ukf);
 static_assert(LAH_LAYOUT == lahColMajor,
               "layout not col‑major; update copy, propagate");
 
-#endif /* _SR_UKF_H_ */
+#endif /* _SRUKF_H_ */

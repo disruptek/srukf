@@ -11,7 +11,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "sr_ukf.h"
+#include "srukf.h"
 
 /* Number of iterations per benchmark */
 #define WARMUP_ITERS 100
@@ -88,7 +88,7 @@ static void meas_nonlinear(const lah_mat *x, lah_mat *z, void *user) {
 /* ---------------- Benchmark routines -------------------------------- */
 static void bench_predict(int N, int M, int iters, double *samples,
                           void (*f)(const lah_mat *, lah_mat *, void *)) {
-  sr_ukf *ukf = sr_ukf_create(N, M);
+  srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
@@ -101,36 +101,36 @@ static void bench_predict(int N, int M, int iters, double *samples,
     LAH_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
     LAH_ENTRY(R, i, i) = 0.1;
-  sr_ukf_set_noise(ukf, Q, R);
-  sr_ukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  srukf_set_noise(ukf, Q, R);
+  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* Initialize state */
   for (int i = 0; i < N; i++)
     LAH_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
 
   /* Pre-allocate workspace */
-  sr_ukf_alloc_workspace(ukf);
+  srukf_alloc_workspace(ukf);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
-    sr_ukf_predict(ukf, f, NULL);
+    srukf_predict(ukf, f, NULL);
 
   /* Benchmark */
   for (int i = 0; i < iters; i++) {
     double t0 = get_time_ns();
-    sr_ukf_predict(ukf, f, NULL);
+    srukf_predict(ukf, f, NULL);
     double t1 = get_time_ns();
     samples[i] = t1 - t0;
   }
 
   lah_matFree(Q);
   lah_matFree(R);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 }
 
 static void bench_correct(int N, int M, int iters, double *samples,
                           void (*h)(const lah_mat *, lah_mat *, void *)) {
-  sr_ukf *ukf = sr_ukf_create(N, M);
+  srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
@@ -143,8 +143,8 @@ static void bench_correct(int N, int M, int iters, double *samples,
     LAH_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
     LAH_ENTRY(R, i, i) = 0.1;
-  sr_ukf_set_noise(ukf, Q, R);
-  sr_ukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  srukf_set_noise(ukf, Q, R);
+  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* Initialize state */
   for (int i = 0; i < N; i++)
@@ -156,16 +156,16 @@ static void bench_correct(int N, int M, int iters, double *samples,
     LAH_ENTRY(z, i, 0) = 0.1 * (i + 1);
 
   /* Pre-allocate workspace */
-  sr_ukf_alloc_workspace(ukf);
+  srukf_alloc_workspace(ukf);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
-    sr_ukf_correct(ukf, z, h, NULL);
+    srukf_correct(ukf, z, h, NULL);
 
   /* Benchmark */
   for (int i = 0; i < iters; i++) {
     double t0 = get_time_ns();
-    sr_ukf_correct(ukf, z, h, NULL);
+    srukf_correct(ukf, z, h, NULL);
     double t1 = get_time_ns();
     samples[i] = t1 - t0;
   }
@@ -173,12 +173,12 @@ static void bench_correct(int N, int M, int iters, double *samples,
   lah_matFree(Q);
   lah_matFree(R);
   lah_matFree(z);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 }
 
 static void bench_predict_to(int N, int M, int iters, double *samples,
                              void (*f)(const lah_mat *, lah_mat *, void *)) {
-  sr_ukf *ukf = sr_ukf_create(N, M);
+  srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
@@ -191,8 +191,8 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
     LAH_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
     LAH_ENTRY(R, i, i) = 0.1;
-  sr_ukf_set_noise(ukf, Q, R);
-  sr_ukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  srukf_set_noise(ukf, Q, R);
+  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* User-managed state buffers */
   lah_mat *x = allocMatrixNow(N, 1);
@@ -203,16 +203,16 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
   }
 
   /* Pre-allocate workspace */
-  sr_ukf_alloc_workspace(ukf);
+  srukf_alloc_workspace(ukf);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
-    sr_ukf_predict_to(ukf, x, S, f, NULL);
+    srukf_predict_to(ukf, x, S, f, NULL);
 
   /* Benchmark */
   for (int i = 0; i < iters; i++) {
     double t0 = get_time_ns();
-    sr_ukf_predict_to(ukf, x, S, f, NULL);
+    srukf_predict_to(ukf, x, S, f, NULL);
     double t1 = get_time_ns();
     samples[i] = t1 - t0;
   }
@@ -221,12 +221,12 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
   lah_matFree(R);
   lah_matFree(x);
   lah_matFree(S);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 }
 
 static void bench_correct_to(int N, int M, int iters, double *samples,
                              void (*h)(const lah_mat *, lah_mat *, void *)) {
-  sr_ukf *ukf = sr_ukf_create(N, M);
+  srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
@@ -239,8 +239,8 @@ static void bench_correct_to(int N, int M, int iters, double *samples,
     LAH_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
     LAH_ENTRY(R, i, i) = 0.1;
-  sr_ukf_set_noise(ukf, Q, R);
-  sr_ukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  srukf_set_noise(ukf, Q, R);
+  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* User-managed state buffers */
   lah_mat *x = allocMatrixNow(N, 1);
@@ -256,16 +256,16 @@ static void bench_correct_to(int N, int M, int iters, double *samples,
     LAH_ENTRY(z, i, 0) = 0.1 * (i + 1);
 
   /* Pre-allocate workspace */
-  sr_ukf_alloc_workspace(ukf);
+  srukf_alloc_workspace(ukf);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
-    sr_ukf_correct_to(ukf, x, S, z, h, NULL);
+    srukf_correct_to(ukf, x, S, z, h, NULL);
 
   /* Benchmark */
   for (int i = 0; i < iters; i++) {
     double t0 = get_time_ns();
-    sr_ukf_correct_to(ukf, x, S, z, h, NULL);
+    srukf_correct_to(ukf, x, S, z, h, NULL);
     double t1 = get_time_ns();
     samples[i] = t1 - t0;
   }
@@ -275,7 +275,7 @@ static void bench_correct_to(int N, int M, int iters, double *samples,
   lah_matFree(x);
   lah_matFree(S);
   lah_matFree(z);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 }
 
 /* ---------------- Main ---------------------------------------------- */

@@ -1,12 +1,12 @@
 /* --------------------------------------------------------------------
  * 06_predict.c - Prediction step tests
  *
- * Tests sr_ukf_predict with various process models and configurations.
+ * Tests srukf_predict with various process models and configurations.
  *
- * This test includes sr_ukf.c directly to access internal functions.
+ * This test includes srukf.c directly to access internal functions.
  * -------------------------------------------------------------------- */
 
-#include "sr_ukf.c"
+#include "srukf.c"
 
 #define EPS 1e-10
 
@@ -51,7 +51,7 @@ static void process_scale(const lah_mat *x, lah_mat *xp, void *user) {
 }
 
 /* Helper: create and setup noise matrices, then set on filter */
-static void setup_noise(sr_ukf *f, int N, int M, lah_value q_diag,
+static void setup_noise(srukf *f, int N, int M, lah_value q_diag,
                         lah_value r_diag) {
   lah_mat *Qsqrt = allocMatrixNow(N, N);
   lah_mat *Rsqrt = allocMatrixNow(M, M);
@@ -65,7 +65,7 @@ static void setup_noise(sr_ukf *f, int N, int M, lah_value q_diag,
     for (int j = 0; j < M; j++)
       LAH_ENTRY(Rsqrt, i, j) = (i == j) ? r_diag : 0.0;
 
-  lah_Return rc = sr_ukf_set_noise(f, Qsqrt, Rsqrt);
+  lah_Return rc = srukf_set_noise(f, Qsqrt, Rsqrt);
   assert(rc == lahReturnOk);
 
   lah_matFree(Qsqrt);
@@ -74,7 +74,7 @@ static void setup_noise(sr_ukf *f, int N, int M, lah_value q_diag,
 
 /* Test 1: Basic identity process */
 static void test_identity_process(void) {
-  sr_ukf *f = sr_ukf_create(3, 1);
+  srukf *f = srukf_create(3, 1);
   assert(f);
 
   /* Set initial state */
@@ -89,14 +89,14 @@ static void test_identity_process(void) {
   /* Setup noise matrices properly */
   setup_noise(f, 3, 1, 0.01, 0.1);
 
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   /* Save initial state */
   lah_value x0[3];
   for (lah_index i = 0; i < 3; i++)
     x0[i] = LAH_ENTRY(f->x, i, 0);
 
-  lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+  lah_Return rc = srukf_predict(f, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should be unchanged for identity process */
@@ -106,35 +106,35 @@ static void test_identity_process(void) {
   /* Covariance should remain SPD */
   assert(is_spd(f->S));
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_identity       OK\n");
 }
 
 /* Test 2: 1D case */
 static void test_1d(void) {
-  sr_ukf *f = sr_ukf_create(1, 1);
+  srukf *f = srukf_create(1, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 5.0;
   LAH_ENTRY(f->S, 0, 0) = 0.5;
   setup_noise(f, 1, 1, 0.1, 0.1);
 
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+  lah_Return rc = srukf_predict(f, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should be near 5.0 */
   assert(fabs(LAH_ENTRY(f->x, 0, 0) - 5.0) < 0.1);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_1d             OK\n");
 }
 
 /* Test 3: High dimension (10D) */
 static void test_10d(void) {
   const int N = 10;
-  sr_ukf *f = sr_ukf_create(N, 1);
+  srukf *f = srukf_create(N, 1);
   assert(f);
 
   /* Set state to [1, 2, ..., 10] */
@@ -146,9 +146,9 @@ static void test_10d(void) {
     LAH_ENTRY(f->S, i, i) = 0.1;
 
   setup_noise(f, N, 1, 0.01, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+  lah_Return rc = srukf_predict(f, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* States should be near original values */
@@ -157,13 +157,13 @@ static void test_10d(void) {
 
   assert(is_spd(f->S));
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_10d            OK\n");
 }
 
 /* Test 4: Constant velocity model */
 static void test_const_velocity(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   /* Initial: pos=0, vel=1 */
@@ -175,23 +175,23 @@ static void test_const_velocity(void) {
   LAH_ENTRY(f->S, 1, 1) = 0.1;
 
   setup_noise(f, 2, 1, 0.01, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_value dt = 0.1;
-  lah_Return rc = sr_ukf_predict(f, process_const_vel, &dt);
+  lah_Return rc = srukf_predict(f, process_const_vel, &dt);
   assert(rc == lahReturnOk);
 
   /* After dt=0.1, pos should be ~0.1, vel should be ~1.0 */
   assert(fabs(LAH_ENTRY(f->x, 0, 0) - 0.1) < 0.1);
   assert(fabs(LAH_ENTRY(f->x, 1, 0) - 1.0) < 0.1);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_const_vel      OK\n");
 }
 
 /* Test 5: Covariance growth with process noise */
 static void test_covariance_growth(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 0.0;
@@ -203,25 +203,25 @@ static void test_covariance_growth(void) {
 
   /* Larger process noise */
   setup_noise(f, 2, 1, 0.5, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   /* Save initial covariance norm */
   lah_value S_norm_before = frobenius_norm(f->S);
 
-  lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+  lah_Return rc = srukf_predict(f, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* Covariance should have grown */
   lah_value S_norm_after = frobenius_norm(f->S);
   assert(S_norm_after > S_norm_before);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_cov_growth     OK\n");
 }
 
 /* Test 6: Sequential predictions */
 static void test_sequential_predictions(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 0.0;
@@ -231,12 +231,12 @@ static void test_sequential_predictions(void) {
   LAH_ENTRY(f->S, 1, 1) = 0.1;
 
   setup_noise(f, 2, 1, 0.01, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_value dt = 0.1;
   /* Run 10 predictions */
   for (int step = 0; step < 10; step++) {
-    lah_Return rc = sr_ukf_predict(f, process_const_vel, &dt);
+    lah_Return rc = srukf_predict(f, process_const_vel, &dt);
     assert(rc == lahReturnOk);
   }
 
@@ -245,13 +245,13 @@ static void test_sequential_predictions(void) {
   assert(fabs(LAH_ENTRY(f->x, 1, 0) - 1.0) < 0.5);
   /* Note: SPD check removed - can fail due to numerical accumulation */
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_sequential     OK\n");
 }
 
 /* Test 7: Zero state */
 static void test_zero_state(void) {
-  sr_ukf *f = sr_ukf_create(3, 1);
+  srukf *f = srukf_create(3, 1);
   assert(f);
 
   /* All zeros for state, diagonal S */
@@ -261,22 +261,22 @@ static void test_zero_state(void) {
   }
 
   setup_noise(f, 3, 1, 0.01, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+  lah_Return rc = srukf_predict(f, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* State should remain near zero */
   for (int i = 0; i < 3; i++)
     assert(fabs(LAH_ENTRY(f->x, i, 0)) < 0.1);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_zero_state     OK\n");
 }
 
 /* Test 8: Large state values */
 static void test_large_values(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 1e6;
@@ -286,9 +286,9 @@ static void test_large_values(void) {
   LAH_ENTRY(f->S, 1, 1) = 1e3;
 
   setup_noise(f, 2, 1, 1.0, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+  lah_Return rc = srukf_predict(f, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* Values should be finite */
@@ -296,13 +296,13 @@ static void test_large_values(void) {
   assert(isfinite(LAH_ENTRY(f->x, 1, 0)));
   assert(is_spd(f->S));
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_large_values   OK\n");
 }
 
 /* Test 9: Scale process */
 static void test_scale_process(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 1.0;
@@ -312,42 +312,42 @@ static void test_scale_process(void) {
   LAH_ENTRY(f->S, 1, 1) = 0.1;
 
   setup_noise(f, 2, 1, 0.01, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
   lah_value scale = 2.0;
-  lah_Return rc = sr_ukf_predict(f, process_scale, &scale);
+  lah_Return rc = srukf_predict(f, process_scale, &scale);
   assert(rc == lahReturnOk);
 
   /* After scaling by 2, x[0]~2.0, x[1]~4.0 */
   assert(fabs(LAH_ENTRY(f->x, 0, 0) - 2.0) < 0.5);
   assert(fabs(LAH_ENTRY(f->x, 1, 0) - 4.0) < 0.5);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_scale_proc     OK\n");
 }
 
 /* Test 10: Error - NULL filter */
 static void test_error_null_filter(void) {
-  lah_Return rc = sr_ukf_predict(NULL, process_identity, NULL);
+  lah_Return rc = srukf_predict(NULL, process_identity, NULL);
   assert(rc == lahReturnParameterError);
   printf("  test_err_null_filt  OK\n");
 }
 
 /* Test 11: Error - NULL process function */
 static void test_error_null_function(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->S, 0, 0) = 0.1;
   LAH_ENTRY(f->S, 1, 1) = 0.1;
 
   setup_noise(f, 2, 1, 0.01, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_Return rc = sr_ukf_predict(f, NULL, NULL);
+  lah_Return rc = srukf_predict(f, NULL, NULL);
   assert(rc == lahReturnParameterError);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_err_null_func  OK\n");
 }
 
@@ -356,7 +356,7 @@ static void test_alpha_variations(void) {
   lah_value alphas[] = {1e-3, 0.5, 1.0, 2.0};
 
   for (int a = 0; a < 4; a++) {
-    sr_ukf *f = sr_ukf_create(2, 1);
+    srukf *f = srukf_create(2, 1);
     assert(f);
 
     LAH_ENTRY(f->x, 0, 0) = 1.0;
@@ -366,20 +366,20 @@ static void test_alpha_variations(void) {
     LAH_ENTRY(f->S, 1, 1) = 0.1;
 
     setup_noise(f, 2, 1, 0.01, 0.1);
-    sr_ukf_set_scale(f, alphas[a], 2.0, 0.0);
+    srukf_set_scale(f, alphas[a], 2.0, 0.0);
 
-    lah_Return rc = sr_ukf_predict(f, process_identity, NULL);
+    lah_Return rc = srukf_predict(f, process_identity, NULL);
     assert(rc == lahReturnOk);
     assert(is_spd(f->S));
 
-    sr_ukf_free(f);
+    srukf_free(f);
   }
   printf("  test_alpha_var      OK\n");
 }
 
 /* Test 13: Nonlinear square process */
 static void test_nonlinear_square(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   /* x = [0.5, 0.5] -> x^2 = [0.25, 0.25] */
@@ -390,22 +390,22 @@ static void test_nonlinear_square(void) {
   LAH_ENTRY(f->S, 1, 1) = 0.01;
 
   setup_noise(f, 2, 1, 0.001, 0.1);
-  sr_ukf_set_scale(f, 1.0, 2.0, 0.0);
+  srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_Return rc = sr_ukf_predict(f, process_square, NULL);
+  lah_Return rc = srukf_predict(f, process_square, NULL);
   assert(rc == lahReturnOk);
 
   /* After squaring, x should be ~0.25 */
   assert(fabs(LAH_ENTRY(f->x, 0, 0) - 0.25) < 0.1);
   assert(fabs(LAH_ENTRY(f->x, 1, 0) - 0.25) < 0.1);
 
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_nonlinear      OK\n");
 }
 
 /* Test 14: predict_to - transactional in-place API */
 static void test_predict_to(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 1.0;
@@ -429,7 +429,7 @@ static void test_predict_to(void) {
   lah_value x1_orig = LAH_ENTRY(f->x, 1, 0);
 
   /* Run predict_to on user buffers */
-  lah_Return rc = sr_ukf_predict_to(f, x, S, process_identity, NULL);
+  lah_Return rc = srukf_predict_to(f, x, S, process_identity, NULL);
   assert(rc == lahReturnOk);
 
   /* Filter state should be unchanged (ukf is const) */
@@ -443,13 +443,13 @@ static void test_predict_to(void) {
 
   lah_matFree(x);
   lah_matFree(S);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_predict_to     OK\n");
 }
 
 /* Test 15: predict_to chaining (lookahead) */
 static void test_predict_to_chaining(void) {
-  sr_ukf *f = sr_ukf_create(2, 1);
+  srukf *f = srukf_create(2, 1);
   assert(f);
 
   LAH_ENTRY(f->x, 0, 0) = 0.0; /* position */
@@ -471,7 +471,7 @@ static void test_predict_to_chaining(void) {
   /* Chain 5 predictions (lookahead) */
   lah_value dt = 1.0;
   for (int i = 0; i < 5; i++) {
-    lah_Return rc = sr_ukf_predict_to(f, x, S, process_const_vel, &dt);
+    lah_Return rc = srukf_predict_to(f, x, S, process_const_vel, &dt);
     assert(rc == lahReturnOk);
   }
 
@@ -484,12 +484,12 @@ static void test_predict_to_chaining(void) {
 
   lah_matFree(x);
   lah_matFree(S);
-  sr_ukf_free(f);
+  srukf_free(f);
   printf("  test_predict_chain  OK\n");
 }
 
 int main(void) {
-  printf("Running sr_ukf_predict tests...\n");
+  printf("Running srukf_predict tests...\n");
 
   test_identity_process();
   test_1d();

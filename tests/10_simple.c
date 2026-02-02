@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------
  *  test_simple.c
  *  Simple unit test for the Square‑Root Unscented Kalman Filter
- *  (sr_ukf).  The test uses a 2‑state linear system
+ *  (srukf).  The test uses a 2‑state linear system
  *  with an identity process model and a scalar measurement.
  *
  *  The filter is exercised through:
@@ -15,10 +15,10 @@
  *  matrices must stay internally consistent (SPD, correct
  *  dimensions, etc.).
  *
- *  This test includes sr_ukf.c directly to access internal functions.
+ *  This test includes srukf.c directly to access internal functions.
  * ------------------------------------------------------------------ */
 
-#include "sr_ukf.c"
+#include "srukf.c"
 
 #define DEBUG_PRINT 0
 static void print_vec(const char *name, const lah_mat *v) {
@@ -64,23 +64,23 @@ int main(void) {
     LAH_ENTRY(Rsqrt, i, i) = 0.2;
 
   /* ---- 2. Create filter */
-  sr_ukf *ukf = sr_ukf_create(N, M);
+  srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Filter creation failed.\n");
     return 1;
   }
-  lah_Return rc = sr_ukf_set_noise(ukf, Qsqrt, Rsqrt);
+  lah_Return rc = srukf_set_noise(ukf, Qsqrt, Rsqrt);
   if (rc != lahReturnOk) {
     fprintf(stderr, "Setting noise failed: %d\n", rc);
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     return 1;
   }
 
   /* ---- 3. Set scaling parameters (α, β, κ) */
-  rc = sr_ukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  rc = srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
   if (rc != lahReturnOk) {
     fprintf(stderr, "Setting scale failed: %d\n", rc);
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     return 1;
   }
 
@@ -90,7 +90,7 @@ int main(void) {
   rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, Xsig);
   if (rc != lahReturnOk) {
     fprintf(stderr, "Sigma‑point generation failed: %d\n", rc);
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     return 1;
   }
@@ -99,7 +99,7 @@ int main(void) {
   for (lah_index i = 0; i < N; ++i)
     if (fabs(LAH_ENTRY(Xsig, i, 0) - 0.0) > 1e-12) {
       fprintf(stderr, "Sigma point 0 wrong.\n");
-      sr_ukf_free(ukf);
+      srukf_free(ukf);
       lah_matFree(Xsig);
       return 1;
     }
@@ -108,16 +108,16 @@ int main(void) {
   lah_value gamma = sqrt((lah_value)N + ukf->lambda);
   if (gamma <= 0.0) {
     fprintf(stderr, "Gamma <= 0.\n");
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     return 1;
   }
 
   /* ---- 5. Run one predict step */
-  rc = sr_ukf_predict(ukf, id_process, NULL);
+  rc = srukf_predict(ukf, id_process, NULL);
   if (rc != lahReturnOk) {
     fprintf(stderr, "Predict failed: %d\n", rc);
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     return 1;
   }
@@ -126,7 +126,7 @@ int main(void) {
   for (lah_index i = 0; i < N; ++i)
     if (fabs(LAH_ENTRY(ukf->x, i, 0) - 0.0) > 1e-12) {
       fprintf(stderr, "State after predict non‑zero.\n");
-      sr_ukf_free(ukf);
+      srukf_free(ukf);
       lah_matFree(Xsig);
       return 1;
     }
@@ -134,7 +134,7 @@ int main(void) {
   /* Covariance should have increased (roughly).  Check SPD: */
   if (!is_spd(ukf->S)) {
     fprintf(stderr, "Covariance not SPD after predict.\n");
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     return 1;
   }
@@ -145,10 +145,10 @@ int main(void) {
   for (lah_index i = 0; i < M; ++i)
     LAH_ENTRY(z, i, 0) = 0.1;
 
-  rc = sr_ukf_correct(ukf, z, meas_model, NULL);
+  rc = srukf_correct(ukf, z, meas_model, NULL);
   if (rc != lahReturnOk) {
     fprintf(stderr, "Correct failed: %d\n", rc);
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     lah_matFree(z);
     return 1;
@@ -158,7 +158,7 @@ int main(void) {
   if (fabs(LAH_ENTRY(ukf->x, 0, 0) - 0.02) > 1e-2) {
     fprintf(stderr, "State after correct not close to expected.\n");
     print_vec("x", ukf->x);
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     lah_matFree(z);
     return 1;
@@ -167,14 +167,14 @@ int main(void) {
   /* Covariance must remain SPD. */
   if (!is_spd(ukf->S)) {
     fprintf(stderr, "Covariance not SPD after correct.\n");
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     lah_matFree(Xsig);
     lah_matFree(z);
     return 1;
   }
 
   /* ---- 7. Clean up */
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   lah_matFree(Xsig);
   lah_matFree(z);
 

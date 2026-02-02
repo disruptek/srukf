@@ -9,16 +9,16 @@ BIN_DIR     := $(SR_DIR)/bin
 # Flags
 CFLAGS      := -Wall -Wextra -Wpedantic -O2 -fPIC -I$(LAH_INC) -I$(SR_DIR) -DHAVE_LAPACK
 LDFLAGS     := -L$(LAH_LIB) -llah -Wl,-rpath,$(LAH_LIB) -lm -llapacke -lblas -lopenblas
-LDLIBS      := -lsr_ukf -llah -lm -llapacke -lblas -lopenblas
+LDLIBS      := -lsrukf -llah -lm -llapacke -lblas -lopenblas
 
-LIB_SRCS    := sr_ukf.c
-LIB_HDRS    := sr_ukf.h
-LIB_NAME    := libsr_ukf.so
+LIB_SRCS    := srukf.c
+LIB_HDRS    := srukf.h
+LIB_NAME    := libsrukf.so
 
 TEST_DIR    := $(CURDIR)/tests
 TEST_SRCS   := $(wildcard $(TEST_DIR)/*.c)
 TEST_BINS   := $(TEST_SRCS:$(TEST_DIR)/%.c=$(BIN_DIR)/%.out)
-TEST_LD     := -L$(SR_DIR) -lsr_ukf -Wl,-rpath,$(SR_DIR) $(LDFLAGS)
+TEST_LD     := -L$(SR_DIR) -lsrukf -Wl,-rpath,$(SR_DIR) $(LDFLAGS)
 TEST_OUTPUT := tests-output.txt
 
 # Tests that need internal access (include .c directly, don't link library)
@@ -31,7 +31,7 @@ $(LIB_NAME): $(LIB_SRCS) $(LIB_HDRS)
 $(BIN_DIR):
 	mkdir -p $@
 
-# Internal tests: compile with sr_ukf.c directly (no library link)
+# Internal tests: compile with srukf.c directly (no library link)
 define INTERNAL_TEST_RULE
 $(BIN_DIR)/$(1).out: $(TEST_DIR)/$(1).c $(LIB_SRCS) $(LIB_HDRS) $(LAH_DIR)/Lib/liblah.so | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $$@ $$< $(LDFLAGS)

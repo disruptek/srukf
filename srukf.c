@@ -5,12 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "sr_ukf.h"
+#include "srukf.h"
 
 #define DEFAULT_ALPHA 1e-3
 #define DEFAULT_BETA 2.0
 #define DEFAULT_KAPPA 1.0
-#define SR_UKF_EPS 1e-12 /* safety margin for λ close to –N */
+#define SRUKF_EPS 1e-12 /* safety margin for λ close to –N */
 
 /* BLAS triangular solve: solves op(A)*X = alpha*B or X*op(A) = alpha*B */
 #ifdef LAH_SINGLE
@@ -22,9 +22,9 @@
 #endif
 
 /* --------- Diagnostic callback ----------------------------------- */
-static sr_ukf_diag_fn g_diag_callback = NULL;
+static srukf_diag_fn g_diag_callback = NULL;
 
-void sr_ukf_set_diag_callback(sr_ukf_diag_fn fn) { g_diag_callback = fn; }
+void srukf_set_diag_callback(srukf_diag_fn fn) { g_diag_callback = fn; }
 
 /* Report a diagnostic message via the callback (if set). */
 static void diag_report(const char *msg) {
@@ -54,7 +54,7 @@ static lah_Return compute_weighted_deviations(const lah_mat *Ysig,
 /*-------------------- Workspace definition and management ----------*/
 /* Workspace holds pre-allocated temporaries to avoid malloc on each call.
  * Allocated on demand, freed with filter or explicitly. */
-struct sr_ukf_workspace {
+struct srukf_workspace {
   lah_index N; /* state dimension this workspace was allocated for */
   lah_index M; /* measurement dimension */
 
@@ -91,11 +91,11 @@ struct sr_ukf_workspace {
 };
 
 /* Free workspace and set pointer to NULL */
-void sr_ukf_free_workspace(sr_ukf *ukf) {
+void srukf_free_workspace(srukf *ukf) {
   if (!ukf || !ukf->ws)
     return;
 
-  sr_ukf_workspace *ws = ukf->ws;
+  srukf_workspace *ws = ukf->ws;
 
   /* Free all matrices */
   lah_matFree(ws->Xsig);
@@ -129,12 +129,12 @@ void sr_ukf_free_workspace(sr_ukf *ukf) {
 }
 
 /* Allocate workspace for given dimensions */
-lah_Return sr_ukf_alloc_workspace(sr_ukf *ukf) {
+lah_Return srukf_alloc_workspace(srukf *ukf) {
   if (!ukf)
     return lahReturnParameterError;
 
-  lah_index N = sr_ukf_state_dim(ukf);
-  lah_index M = sr_ukf_meas_dim(ukf);
+  lah_index N = srukf_state_dim(ukf);
+  lah_index M = srukf_meas_dim(ukf);
   if (N == 0 || M == 0)
     return lahReturnParameterError;
 
@@ -144,13 +144,13 @@ lah_Return sr_ukf_alloc_workspace(sr_ukf *ukf) {
 
   /* Free existing workspace if dimensions changed */
   if (ukf->ws)
-    sr_ukf_free_workspace(ukf);
+    srukf_free_workspace(ukf);
 
   lah_index n_sigma = 2 * N + 1;
 
   /* Allocate workspace struct */
-  sr_ukf_workspace *ws =
-      (sr_ukf_workspace *)calloc(1, sizeof(sr_ukf_workspace));
+  srukf_workspace *ws =
+      (srukf_workspace *)calloc(1, sizeof(srukf_workspace));
   if (!ws)
     return lahReturnParameterError;
 
@@ -194,7 +194,7 @@ lah_Return sr_ukf_alloc_workspace(sr_ukf *ukf) {
       !ws->Rtmp || !ws->dx || !ws->tmp1 || !ws->Kt || !ws->tmp2 ||
       !ws->Dev_N || !ws->Dev_M || !ws->qr_work_N || !ws->qr_work_M || !ws->Syy) {
     ukf->ws = ws; /* Temporarily assign so free_workspace can clean up */
-    sr_ukf_free_workspace(ukf);
+    srukf_free_workspace(ukf);
     return lahReturnParameterError;
   }
 
@@ -203,15 +203,15 @@ lah_Return sr_ukf_alloc_workspace(sr_ukf *ukf) {
 }
 
 /* Ensure workspace is allocated (lazy allocation helper) */
-static lah_Return ensure_workspace(sr_ukf *ukf) {
+static lah_Return ensure_workspace(srukf *ukf) {
   if (ukf->ws) {
     /* Check dimensions still match */
-    lah_index N = sr_ukf_state_dim(ukf);
-    lah_index M = sr_ukf_meas_dim(ukf);
+    lah_index N = srukf_state_dim(ukf);
+    lah_index M = srukf_meas_dim(ukf);
     if (ukf->ws->N == N && ukf->ws->M == M)
       return lahReturnOk;
   }
-  return sr_ukf_alloc_workspace(ukf);
+  return srukf_alloc_workspace(ukf);
 }
 
 /* Check if matrix contains any NaN or Inf values.
@@ -250,7 +250,7 @@ static bool is_spd(const lah_mat *A) {
   /* tiny jitter to guard against round‑off that might make a
    * positive‑definite matrix look singular. */
   for (lah_index i = 0; i < tmp->nR; ++i)
-    LAH_ENTRY(tmp, i, i) += SR_UKF_EPS;
+    LAH_ENTRY(tmp, i, i) += SRUKF_EPS;
 
   /* 4. Cholesky – success ⇒ SPD, failure ⇒ not SPD.                      */
   bool ok = (lah_chol(tmp, 0) == lahReturnOk);
@@ -267,7 +267,7 @@ static lah_Return alloc_vector(lah_value **vec, lah_index len) {
 
 /* Compute weights for mean (wm) and covariance (wc)
  * for a given filter dimension n and scaling λ. */
-static lah_Return sr_ukf_compute_weights(sr_ukf *ukf, const lah_index n) {
+static lah_Return srukf_compute_weights(srukf *ukf, const lah_index n) {
   lah_index n_sigma = 2 * n + 1;
 
   /* Allocate weight vectors if needed */
@@ -285,7 +285,7 @@ static lah_Return sr_ukf_compute_weights(sr_ukf *ukf, const lah_index n) {
 
   /* Common denominator for all weights */
   const lah_value denom = (lah_value)n + ukf->lambda;
-  if (fabs(denom) < SR_UKF_EPS) { /* safeguard against division by zero */
+  if (fabs(denom) < SRUKF_EPS) { /* safeguard against division by zero */
     diag_report("compute_weights: denominator too small (n + lambda ≈ 0)");
     return lahReturnMathError;
   }
@@ -305,8 +305,8 @@ static lah_Return sr_ukf_compute_weights(sr_ukf *ukf, const lah_index n) {
 
 /* Set the UKF scaling parameters (α, β, κ) and recompute the
  * scaling factor λ and the weight vectors for mean and covariance. */
-lah_Return sr_ukf_set_scale(sr_ukf *ukf, lah_value alpha, lah_value beta,
-                            lah_value kappa) {
+lah_Return srukf_set_scale(srukf *ukf, lah_value alpha, lah_value beta,
+                           lah_value kappa) {
   if (!ukf || !ukf->x)
     return lahReturnParameterError; /* filter or state not yet allocated */
 
@@ -318,15 +318,15 @@ lah_Return sr_ukf_set_scale(sr_ukf *ukf, lah_value alpha, lah_value beta,
   lah_value lambda = alpha * alpha * ((lah_value)n + kappa) - (lah_value)n;
 
   /* --------- guard against λ ≈ –n ------------------------------ */
-  if (fabs((double)(n + lambda)) < SR_UKF_EPS) {
+  if (fabs((double)(n + lambda)) < SRUKF_EPS) {
     /* Cannot recompute α if (n + κ) ≈ 0 (would divide by zero) */
-    if (fabs((double)n + kappa) < SR_UKF_EPS)
+    if (fabs((double)n + kappa) < SRUKF_EPS)
       return lahReturnParameterError;
     /* clamp λ to –n + ε */
-    lambda = -(lah_value)n + SR_UKF_EPS;
+    lambda = -(lah_value)n + SRUKF_EPS;
     /* recompute α from the clamped λ  (λ = α²(n+κ) – n)  */
     lah_value a = sqrt((lambda + (lah_value)n) / ((lah_value)n + kappa));
-    return sr_ukf_set_scale(ukf, a, beta, kappa);
+    return srukf_set_scale(ukf, a, beta, kappa);
   } else {
     /* --------- store the (possibly adjusted) parameters ------------- */
     ukf->alpha = alpha;
@@ -335,17 +335,17 @@ lah_Return sr_ukf_set_scale(sr_ukf *ukf, lah_value alpha, lah_value beta,
     ukf->lambda = lambda;
 
     /* --------- recompute mean & covariance weights -------------- */
-    return sr_ukf_compute_weights(ukf, n);
+    return srukf_compute_weights(ukf, n);
   }
 }
 
 /* Free all memory allocated for the filter. */
-void sr_ukf_free(sr_ukf *ukf) {
+void srukf_free(srukf *ukf) {
   if (!ukf)
     return;
 
   /* Free workspace if allocated */
-  sr_ukf_free_workspace(ukf);
+  srukf_free_workspace(ukf);
 
   /* Free all internal matrices (they own their data) */
   if (ukf->x)
@@ -372,13 +372,13 @@ void sr_ukf_free(sr_ukf *ukf) {
 }
 
 /*-------------------- Dimension accessors ----------------------------*/
-lah_index sr_ukf_state_dim(const sr_ukf *ukf) {
+lah_index srukf_state_dim(const srukf *ukf) {
   if (!ukf || !ukf->x)
     return 0;
   return ukf->x->nR;
 }
 
-lah_index sr_ukf_meas_dim(const sr_ukf *ukf) {
+lah_index srukf_meas_dim(const srukf *ukf) {
   if (!ukf || !ukf->Rsqrt)
     return 0;
   return ukf->Rsqrt->nR;
@@ -388,10 +388,10 @@ lah_index sr_ukf_meas_dim(const sr_ukf *ukf) {
 /*  Shared internal initialisation routine – used by both `create()`  */
 /*  and `create_from_noise()` to avoid code duplication.             */
 /* ------------------------------------------------------------------ */
-static lah_Return sr_ukf_init(sr_ukf *ukf, int N /* states */,
-                              int M /* measurements */,
-                              const lah_mat *Qsqrt_src,
-                              const lah_mat *Rsqrt_src) {
+static lah_Return srukf_init(srukf *ukf, int N /* states */,
+                             int M /* measurements */,
+                             const lah_mat *Qsqrt_src,
+                             const lah_mat *Rsqrt_src) {
   if (!ukf)
     return lahReturnParameterError;
 
@@ -448,29 +448,29 @@ static lah_Return sr_ukf_init(sr_ukf *ukf, int N /* states */,
   LAH_SETTYPE(ukf->Rsqrt, lahTypeSquare | lahTypeColMajor);
 
   /* ----------------- Default scaling -------------------------------- */
-  return sr_ukf_set_scale(ukf, DEFAULT_ALPHA, DEFAULT_BETA, DEFAULT_KAPPA);
+  return srukf_set_scale(ukf, DEFAULT_ALPHA, DEFAULT_BETA, DEFAULT_KAPPA);
 }
 
 /* ------------------------------------------------------------------ */
-/*  sr_ukf_create – create a filter with uninitialised noise matrices */
+/*  srukf_create – create a filter with uninitialised noise matrices */
 /* ------------------------------------------------------------------ */
-sr_ukf *sr_ukf_create(int N /* states */, int M /* measurements */) {
-  sr_ukf *ukf = (sr_ukf *)calloc(1, sizeof(sr_ukf));
+srukf *srukf_create(int N /* states */, int M /* measurements */) {
+  srukf *ukf = (srukf *)calloc(1, sizeof(srukf));
   if (!ukf)
     return NULL; /* out‑of‑memory */
 
   /* initialise all internal data (noise matrices left empty) */
-  if (sr_ukf_init(ukf, N, M, NULL, NULL) != lahReturnOk) {
-    sr_ukf_free(ukf);
+  if (srukf_init(ukf, N, M, NULL, NULL) != lahReturnOk) {
+    srukf_free(ukf);
     return NULL;
   }
   return ukf;
 }
 
 /* ------------------------------------------------------------------ */
-/*  sr_ukf_create_from_noise – create a filter from supplied noise    */
+/*  srukf_create_from_noise – create a filter from supplied noise    */
 /* ------------------------------------------------------------------ */
-sr_ukf *sr_ukf_create_from_noise(const lah_mat *Qsqrt, const lah_mat *Rsqrt) {
+srukf *srukf_create_from_noise(const lah_mat *Qsqrt, const lah_mat *Rsqrt) {
   if (!Qsqrt || !Rsqrt)
     return NULL;
 
@@ -478,22 +478,22 @@ sr_ukf *sr_ukf_create_from_noise(const lah_mat *Qsqrt, const lah_mat *Rsqrt) {
   if (Qsqrt->nR != Qsqrt->nC || Rsqrt->nR != Rsqrt->nC)
     return NULL;
 
-  sr_ukf *ukf = (sr_ukf *)calloc(1, sizeof(sr_ukf));
+  srukf *ukf = (srukf *)calloc(1, sizeof(srukf));
   if (!ukf)
     return NULL;
 
   /* initialize all internal data and copy the supplied noise matrices */
-  if (sr_ukf_init(ukf, (int)Qsqrt->nR, (int)Rsqrt->nR, Qsqrt, Rsqrt) !=
+  if (srukf_init(ukf, (int)Qsqrt->nR, (int)Rsqrt->nR, Qsqrt, Rsqrt) !=
       lahReturnOk) {
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
     return NULL;
   }
   return ukf;
 }
 
 /* Set the filter's noise square‑root covariance matrices. */
-lah_Return sr_ukf_set_noise(sr_ukf *ukf, const lah_mat *Qsqrt,
-                            const lah_mat *Rsqrt) {
+lah_Return srukf_set_noise(srukf *ukf, const lah_mat *Qsqrt,
+                           const lah_mat *Rsqrt) {
   /* Basic checks */
   if (!ukf || !Qsqrt || !Rsqrt)
     return lahReturnParameterError;
@@ -699,9 +699,9 @@ static lah_Return chol_downdate_rank1(lah_mat *S, const lah_value *v) {
     }
     lah_value r = sqrt(r2);
 
-    if (fabs(Sjj) < SR_UKF_EPS) {
+    if (fabs(Sjj) < SRUKF_EPS) {
       /* Skip if diagonal is essentially zero */
-      if (fabs(wj) > SR_UKF_EPS) {
+      if (fabs(wj) > SRUKF_EPS) {
         free(w);
         return lahReturnMathError;
       }
@@ -781,11 +781,11 @@ static lah_Return compute_weighted_deviations(const lah_mat *Ysig,
  * wc0_negative: if true, wc[0] < 0 and we need to do a downdate after QR
  * dev0       : first column of deviations (for potential downdate)
  */
-static lah_Return sr_ukf_sqrt_from_deviations_ex(const lah_mat *Dev,
-                                                  const lah_mat *Noise_sqrt,
-                                                  lah_mat *S, lah_mat *work,
-                                                  bool wc0_negative,
-                                                  const lah_value *dev0) {
+static lah_Return srukf_sqrt_from_deviations_ex(const lah_mat *Dev,
+                                                const lah_mat *Noise_sqrt,
+                                                lah_mat *S, lah_mat *work,
+                                                bool wc0_negative,
+                                                const lah_value *dev0) {
   if (!Dev || !Noise_sqrt || !S || !work)
     return lahReturnParameterError;
 
@@ -877,8 +877,8 @@ static lah_Return sr_ukf_sqrt_from_deviations_ex(const lah_mat *Dev,
  * mean : M x 1 output mean
  */
 static lah_Return compute_weighted_mean(const lah_mat *Ysig,
-                                         const lah_value *wm,
-                                         lah_mat *mean) {
+                                        const lah_value *wm,
+                                        lah_mat *mean) {
   if (!Ysig || !wm || !mean)
     return lahReturnParameterError;
 
@@ -944,7 +944,7 @@ compute_cross_covariance(const lah_mat *Xsig, const lah_mat *Ysig,
   return lahReturnOk;
 }
 
-/* ---------- sr_ukf_predict_core ----------
+/* ---------- srukf_predict_core ----------
  * Core prediction using proper SR-UKF with QR decomposition.
  * Reads from x_in/S_in, writes to x_out/S_out.
  * ukf is used for parameters (lambda, weights, Qsqrt) and workspace.
@@ -958,9 +958,9 @@ compute_cross_covariance(const lah_mat *Xsig, const lah_mat *Ysig,
  * This avoids forming full covariance and maintains numerical stability.
  */
 static lah_Return
-sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
-                    void (*f)(const lah_mat *, lah_mat *, void *), void *user,
-                    lah_mat *x_out, lah_mat *S_out) {
+srukf_predict_core(const srukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
+                   void (*f)(const lah_mat *, lah_mat *, void *), void *user,
+                   lah_mat *x_out, lah_mat *S_out) {
   lah_Return ret = lahReturnOk;
   if (!ukf || !f || !x_in || !S_in || !x_out || !S_out)
     return lahReturnParameterError;
@@ -977,7 +977,7 @@ sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
     return lahReturnParameterError;
 
   /* --- Use workspace temporaries ----------------------------------- */
-  sr_ukf_workspace *ws = ukf->ws;
+  srukf_workspace *ws = ukf->ws;
   lah_mat *Xsig = ws->Xsig;
   lah_mat *Ysig = ws->Ysig_N;
   lah_mat *x_mean = ws->x_pred;
@@ -1030,8 +1030,8 @@ sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
       dev0[i] = LAH_ENTRY(Dev, i, 0);
   }
 
-  ret = sr_ukf_sqrt_from_deviations_ex(Dev, ukf->Qsqrt, S_out, qr_work,
-                                        wc0_negative, dev0);
+  ret = srukf_sqrt_from_deviations_ex(Dev, ukf->Qsqrt, S_out, qr_work,
+                                      wc0_negative, dev0);
   if (dev0)
     free(dev0);
   if (ret != lahReturnOk) {
@@ -1045,18 +1045,18 @@ sr_ukf_predict_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
   return lahReturnOk;
 }
 
-/* ---------- sr_ukf_predict_to ----------
+/* ---------- srukf_predict_to ----------
  * Transactional predict: operates in-place on user-provided x/S.
  * Uses cached workspace for temporaries (allocated on demand).
  */
-lah_Return sr_ukf_predict_to(sr_ukf *ukf, lah_mat *x, lah_mat *S,
-                             void (*f)(const lah_mat *, lah_mat *, void *),
-                             void *user) {
+lah_Return srukf_predict_to(srukf *ukf, lah_mat *x, lah_mat *S,
+                            void (*f)(const lah_mat *, lah_mat *, void *),
+                            void *user) {
   if (!ukf || !x || !S)
     return lahReturnParameterError;
 
   /* Validate dimensions match filter */
-  lah_index N = sr_ukf_state_dim(ukf);
+  lah_index N = srukf_state_dim(ukf);
   if (N == 0)
     return lahReturnParameterError;
   if (x->nR != N || x->nC != 1)
@@ -1069,16 +1069,16 @@ lah_Return sr_ukf_predict_to(sr_ukf *ukf, lah_mat *x, lah_mat *S,
   if (ret != lahReturnOk)
     return ret;
 
-  return sr_ukf_predict_core(ukf, x, S, f, user, x, S);
+  return srukf_predict_core(ukf, x, S, f, user, x, S);
 }
 
-/* ---------- sr_ukf_predict ----------
+/* ---------- srukf_predict ----------
  * Safe predict: atomic update of ukf->x and ukf->S.
  * On error, filter state is unchanged.
  */
-lah_Return sr_ukf_predict(sr_ukf *ukf,
-                          void (*f)(const lah_mat *, lah_mat *, void *),
-                          void *user) {
+lah_Return srukf_predict(srukf *ukf,
+                         void (*f)(const lah_mat *, lah_mat *, void *),
+                         void *user) {
   if (!ukf || !ukf->x || !ukf->S)
     return lahReturnParameterError;
 
@@ -1094,7 +1094,7 @@ lah_Return sr_ukf_predict(sr_ukf *ukf,
   lah_mat *S_out = ukf->ws->S_tmp;
 
   /* Run core: read from ukf->x/S, write to temps */
-  ret = sr_ukf_predict_core(ukf, ukf->x, ukf->S, f, user, x_out, S_out);
+  ret = srukf_predict_core(ukf, ukf->x, ukf->S, f, user, x_out, S_out);
 
   /* Commit on success */
   if (ret == lahReturnOk) {
@@ -1105,7 +1105,7 @@ lah_Return sr_ukf_predict(sr_ukf *ukf,
   return ret;
 }
 
-/* ---------- sr_ukf_correct_core ----------
+/* ---------- srukf_correct_core ----------
  * Core correction using proper SR-UKF with QR and Cholesky downdates.
  * Reads from x_in/S_in, writes to x_out/S_out.
  * ukf is used for parameters (lambda, weights, Rsqrt) and workspace.
@@ -1121,9 +1121,9 @@ lah_Return sr_ukf_predict(sr_ukf *ukf,
  * This avoids forming full covariance and maintains numerical stability.
  */
 static lah_Return
-sr_ukf_correct_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
-                    lah_mat *z, void (*h)(const lah_mat *, lah_mat *, void *),
-                    void *user, lah_mat *x_out, lah_mat *S_out) {
+srukf_correct_core(const srukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
+                   lah_mat *z, void (*h)(const lah_mat *, lah_mat *, void *),
+                   void *user, lah_mat *x_out, lah_mat *S_out) {
   lah_Return ret = lahReturnOk;
   if (!ukf || !h || !z || !x_in || !S_in || !x_out || !S_out)
     return lahReturnParameterError;
@@ -1141,7 +1141,7 @@ sr_ukf_correct_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
     return lahReturnParameterError;
 
   /* --- Use workspace temporaries ----------------------------------- */
-  sr_ukf_workspace *ws = ukf->ws;
+  srukf_workspace *ws = ukf->ws;
   lah_mat *Xsig = ws->Xsig;
   lah_mat *Ysig = ws->Ysig_M;
   lah_mat *x_mean = ws->x_pred;
@@ -1195,8 +1195,8 @@ sr_ukf_correct_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
       dev0_M[i] = LAH_ENTRY(Dev_M, i, 0);
   }
 
-  ret = sr_ukf_sqrt_from_deviations_ex(Dev_M, ukf->Rsqrt, Syy, qr_work,
-                                        wc0_negative, dev0_M);
+  ret = srukf_sqrt_from_deviations_ex(Dev_M, ukf->Rsqrt, Syy, qr_work,
+                                      wc0_negative, dev0_M);
   if (dev0_M)
     free(dev0_M);
   if (ret != lahReturnOk)
@@ -1205,7 +1205,7 @@ sr_ukf_correct_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
   /* --- Check if Syy is essentially zero ----------------------------- */
   bool Syy_zero = true;
   for (lah_index i = 0; i < M && Syy_zero; ++i)
-    if (fabs(LAH_ENTRY(Syy, i, i)) > SR_UKF_EPS)
+    if (fabs(LAH_ENTRY(Syy, i, i)) > SRUKF_EPS)
       Syy_zero = false;
   if (Syy_zero) {
     memcpy(x_out->data, x_in->data, N * sizeof(lah_value));
@@ -1293,19 +1293,19 @@ sr_ukf_correct_core(const sr_ukf *ukf, const lah_mat *x_in, const lah_mat *S_in,
   return lahReturnOk;
 }
 
-/* ---------- sr_ukf_correct_to ----------
+/* ---------- srukf_correct_to ----------
  * Transactional correct: operates in-place on user-provided x/S.
  * Uses cached workspace for temporaries (allocated on demand).
  */
-lah_Return sr_ukf_correct_to(sr_ukf *ukf, lah_mat *x, lah_mat *S, lah_mat *z,
-                             void (*h)(const lah_mat *, lah_mat *, void *),
-                             void *user) {
+lah_Return srukf_correct_to(srukf *ukf, lah_mat *x, lah_mat *S, lah_mat *z,
+                            void (*h)(const lah_mat *, lah_mat *, void *),
+                            void *user) {
   if (!ukf || !x || !S || !z)
     return lahReturnParameterError;
 
   /* Validate dimensions match filter */
-  lah_index N = sr_ukf_state_dim(ukf);
-  lah_index M = sr_ukf_meas_dim(ukf);
+  lah_index N = srukf_state_dim(ukf);
+  lah_index M = srukf_meas_dim(ukf);
   if (N == 0 || M == 0)
     return lahReturnParameterError;
   if (x->nR != N || x->nC != 1)
@@ -1320,16 +1320,16 @@ lah_Return sr_ukf_correct_to(sr_ukf *ukf, lah_mat *x, lah_mat *S, lah_mat *z,
   if (ret != lahReturnOk)
     return ret;
 
-  return sr_ukf_correct_core(ukf, x, S, z, h, user, x, S);
+  return srukf_correct_core(ukf, x, S, z, h, user, x, S);
 }
 
-/* ---------- sr_ukf_correct ----------
+/* ---------- srukf_correct ----------
  * Safe correct: atomic update of ukf->x and ukf->S.
  * On error, filter state is unchanged.
  */
-lah_Return sr_ukf_correct(sr_ukf *ukf, lah_mat *z,
-                          void (*h)(const lah_mat *, lah_mat *, void *),
-                          void *user) {
+lah_Return srukf_correct(srukf *ukf, lah_mat *z,
+                         void (*h)(const lah_mat *, lah_mat *, void *),
+                         void *user) {
   if (!ukf || !ukf->x || !ukf->S)
     return lahReturnParameterError;
 
@@ -1345,7 +1345,7 @@ lah_Return sr_ukf_correct(sr_ukf *ukf, lah_mat *z,
   lah_mat *S_out = ukf->ws->S_new;
 
   /* Run core: read from ukf->x/S, write to temps */
-  ret = sr_ukf_correct_core(ukf, ukf->x, ukf->S, z, h, user, x_out, S_out);
+  ret = srukf_correct_core(ukf, ukf->x, ukf->S, z, h, user, x_out, S_out);
 
   /* Commit on success */
   if (ret == lahReturnOk) {

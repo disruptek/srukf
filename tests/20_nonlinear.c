@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------
  * test_nonlinear.c
  *
- * Unit test for the Square‑Root Unscented Kalman Filter (sr_ukf)
+ * Unit test for the Square‑Root Unscented Kalman Filter (srukf)
  * that verifies the implementation with a genuinely nonlinear
  * process and measurement model.
  *
@@ -12,10 +12,10 @@
  *
  * All checks are performed with <assert.h>.
  *
- * This test includes sr_ukf.c directly to access internal functions.
+ * This test includes srukf.c directly to access internal functions.
  * -------------------------------------------------------------------- */
 
-#include "sr_ukf.c"
+#include "srukf.c"
 #include <stdarg.h>
 
 #define DEBUG_PRINT 1
@@ -88,7 +88,7 @@ static void print_mat(const char *name, const lah_mat *m) {
  * -------------------------------------------------------------------- */
 int main(void) {
   /* 1. Create the filter (3 states, 2 measurements) */
-  sr_ukf *ukf = sr_ukf_create(3, 2);
+  srukf *ukf = srukf_create(3, 2);
   assert(ukf && ukf->x && ukf->S && ukf->Qsqrt && ukf->Rsqrt);
 
   /* 2. Initialise the noise covariances (square‑root form) */
@@ -102,19 +102,19 @@ int main(void) {
   for (size_t i = 0; i < 2; ++i)
     LAH_ENTRY(Rtmp, i, i) = 0.2; /* sqrt(0.04) */
 
-  assert(sr_ukf_set_noise(ukf, Qtmp, Rtmp) == lahReturnOk);
+  assert(srukf_set_noise(ukf, Qtmp, Rtmp) == lahReturnOk);
   lah_matFree(Qtmp);
   lah_matFree(Rtmp);
 
   /* 3. Configure the scaling parameters */
-  assert(sr_ukf_set_scale(ukf, 1.0, 2.0, 0.0) == lahReturnOk);
+  assert(srukf_set_scale(ukf, 1.0, 2.0, 0.0) == lahReturnOk);
 
   /* 4. Initialise state to zero */
   for (size_t i = 0; i < 3; ++i)
     LAH_ENTRY(ukf->x, i, 0) = 0.0;
 
   /* 5. One prediction step – state should stay (approximately) zero */
-  assert(sr_ukf_predict(ukf, nonlinear_process, NULL) == lahReturnOk);
+  assert(srukf_predict(ukf, nonlinear_process, NULL) == lahReturnOk);
   for (size_t i = 0; i < 3; ++i)
     assert(fabs(LAH_ENTRY(ukf->x, i, 0)) < 1e-6); /* relaxed tolerance
                                                    */
@@ -127,7 +127,7 @@ int main(void) {
   LAH_ENTRY(z, 0, 0) = 1.0; /* measurement of x1²  -> x1≈±1.0 */
   LAH_ENTRY(z, 1, 0) = 1.0; /* measurement of x3  -> x3≈1.0 */
 
-  assert(sr_ukf_correct(ukf, z, two_dim_meas, NULL) == lahReturnOk);
+  assert(srukf_correct(ukf, z, two_dim_meas, NULL) == lahReturnOk);
 
   assert(is_spd(ukf->S));
   print_vec("x after correct", ukf->x);
@@ -156,14 +156,14 @@ int main(void) {
   /* 7. Run several predict/correct cycles to confirm convergence */
   for (int k = 0; k < 30; ++k) {
     debugprintf("loop iteration %d:\n", k);
-    lah_Return r = sr_ukf_predict(ukf, nonlinear_process, NULL);
+    lah_Return r = srukf_predict(ukf, nonlinear_process, NULL);
     if (r != lahReturnOk) {
-      debugprintf("  sr_ukf_predict failed with code %d\n", r);
+      debugprintf("  srukf_predict failed with code %d\n", r);
     }
     assert(r == lahReturnOk);
-    r = sr_ukf_correct(ukf, z, two_dim_meas, NULL);
+    r = srukf_correct(ukf, z, two_dim_meas, NULL);
     if (r != lahReturnOk) {
-      debugprintf("  sr_ukf_correct failed with code %d\n", r);
+      debugprintf("  srukf_correct failed with code %d\n", r);
     }
     assert(r == lahReturnOk);
     print_vec("x after correct", ukf->x);
@@ -178,7 +178,7 @@ int main(void) {
 
   /* 8. Clean up */
   lah_matFree(z);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 
   printf("all assertions passed.\n");
   return 0;

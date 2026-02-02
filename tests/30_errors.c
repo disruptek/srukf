@@ -1,12 +1,12 @@
 /* --------------------------------------------------------------------
- * 30_errors.c - Error handling tests for sr_ukf
+ * 30_errors.c - Error handling tests for srukf
  *
  * Tests parameter validation and error returns for all public functions.
  *
- * This test includes sr_ukf.c directly to access internal functions.
+ * This test includes srukf.c directly to access internal functions.
  * -------------------------------------------------------------------- */
 
-#include "sr_ukf.c"
+#include "srukf.c"
 
 /* simple helper to allocate a square matrix and set diagonal to 1.0 */
 static lah_mat *alloc_unit_square(lah_index n) {
@@ -33,39 +33,39 @@ static void process(const lah_mat *x, lah_mat *x_out, void *user) {
     LAH_ENTRY(x_out, i, 0) = LAH_ENTRY(x, i, 0);
 }
 
-/* Test 1: sr_ukf_create with invalid dimensions */
+/* Test 1: srukf_create with invalid dimensions */
 static void test_create_invalid(void) {
-  sr_ukf *ukf;
+  srukf *ukf;
 
   /* Zero state dimension - should fail or return NULL */
-  ukf = sr_ukf_create(0, 1);
+  ukf = srukf_create(0, 1);
   /* Implementation may return NULL or valid - just don't crash */
   if (ukf)
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
 
   /* Zero measurement dimension */
-  ukf = sr_ukf_create(2, 0);
+  ukf = srukf_create(2, 0);
   if (ukf)
-    sr_ukf_free(ukf);
+    srukf_free(ukf);
 
   /* Valid creation */
-  ukf = sr_ukf_create(2, 1);
+  ukf = srukf_create(2, 1);
   assert(ukf != NULL);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 
   printf("  test_create_invalid  OK\n");
 }
 
-/* Test 2: sr_ukf_free with NULL */
+/* Test 2: srukf_free with NULL */
 static void test_free_null(void) {
   /* Should not crash */
-  sr_ukf_free(NULL);
+  srukf_free(NULL);
   printf("  test_free_null       OK\n");
 }
 
-/* Test 3: sr_ukf_set_noise dimension mismatches */
+/* Test 3: srukf_set_noise dimension mismatches */
 static void test_set_noise_errors(void) {
-  sr_ukf *ukf = sr_ukf_create(2, 1);
+  srukf *ukf = srukf_create(2, 1);
   assert(ukf);
 
   lah_mat *Qgood = alloc_unit_square(2);
@@ -73,37 +73,37 @@ static void test_set_noise_errors(void) {
   assert(Qgood && Rgood);
 
   /* Valid case */
-  lah_Return rc = sr_ukf_set_noise(ukf, Qgood, Rgood);
+  lah_Return rc = srukf_set_noise(ukf, Qgood, Rgood);
   assert(rc == lahReturnOk);
 
   /* NULL ukf */
-  rc = sr_ukf_set_noise(NULL, Qgood, Rgood);
+  rc = srukf_set_noise(NULL, Qgood, Rgood);
   assert(rc == lahReturnParameterError);
 
   /* NULL Q */
-  rc = sr_ukf_set_noise(ukf, NULL, Rgood);
+  rc = srukf_set_noise(ukf, NULL, Rgood);
   assert(rc == lahReturnParameterError);
 
   /* NULL R */
-  rc = sr_ukf_set_noise(ukf, Qgood, NULL);
+  rc = srukf_set_noise(ukf, Qgood, NULL);
   assert(rc == lahReturnParameterError);
 
   /* Wrong Q dimension */
   lah_mat *Qwrong = alloc_unit_square(3);
-  rc = sr_ukf_set_noise(ukf, Qwrong, Rgood);
+  rc = srukf_set_noise(ukf, Qwrong, Rgood);
   assert(rc == lahReturnParameterError);
   lah_matFree(Qwrong);
 
   /* Wrong R dimension */
   lah_mat *Rwrong = alloc_unit_square(2);
-  rc = sr_ukf_set_noise(ukf, Qgood, Rwrong);
+  rc = srukf_set_noise(ukf, Qgood, Rwrong);
   assert(rc == lahReturnParameterError);
   lah_matFree(Rwrong);
 
   /* Non-square Q */
   lah_mat *Qrect = allocMatrixNow(2, 3);
   if (Qrect) {
-    rc = sr_ukf_set_noise(ukf, Qrect, Rgood);
+    rc = srukf_set_noise(ukf, Qrect, Rgood);
     assert(rc == lahReturnParameterError);
     lah_matFree(Qrect);
   }
@@ -111,64 +111,64 @@ static void test_set_noise_errors(void) {
   /* Non-square R */
   lah_mat *Rrect = allocMatrixNow(1, 2);
   if (Rrect) {
-    rc = sr_ukf_set_noise(ukf, Qgood, Rrect);
+    rc = srukf_set_noise(ukf, Qgood, Rrect);
     assert(rc == lahReturnParameterError);
     lah_matFree(Rrect);
   }
 
   lah_matFree(Qgood);
   lah_matFree(Rgood);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_set_noise_err   OK\n");
 }
 
-/* Test 4: sr_ukf_set_scale errors */
+/* Test 4: srukf_set_scale errors */
 static void test_set_scale_errors(void) {
-  sr_ukf *ukf = sr_ukf_create(2, 1);
+  srukf *ukf = srukf_create(2, 1);
   assert(ukf);
 
   lah_Return rc;
 
   /* NULL ukf */
-  rc = sr_ukf_set_scale(NULL, 1.0, 2.0, 0.0);
+  rc = srukf_set_scale(NULL, 1.0, 2.0, 0.0);
   assert(rc == lahReturnParameterError);
 
   /* alpha = 0 */
-  rc = sr_ukf_set_scale(ukf, 0.0, 2.0, 0.0);
+  rc = srukf_set_scale(ukf, 0.0, 2.0, 0.0);
   assert(rc == lahReturnParameterError);
 
   /* alpha < 0 */
-  rc = sr_ukf_set_scale(ukf, -1.0, 2.0, 0.0);
+  rc = srukf_set_scale(ukf, -1.0, 2.0, 0.0);
   assert(rc == lahReturnParameterError);
 
   /* Valid alpha */
-  rc = sr_ukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  rc = srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
   assert(rc == lahReturnOk);
 
   /* Valid alpha = 1 */
-  rc = sr_ukf_set_scale(ukf, 1.0, 2.0, 0.0);
+  rc = srukf_set_scale(ukf, 1.0, 2.0, 0.0);
   assert(rc == lahReturnOk);
 
   /* Large alpha */
-  rc = sr_ukf_set_scale(ukf, 10.0, 2.0, 0.0);
+  rc = srukf_set_scale(ukf, 10.0, 2.0, 0.0);
   assert(rc == lahReturnOk);
 
   /* Negative kappa is allowed */
-  rc = sr_ukf_set_scale(ukf, 1.0, 2.0, -1.0);
+  rc = srukf_set_scale(ukf, 1.0, 2.0, -1.0);
   assert(rc == lahReturnOk);
 
   /* kappa = -n causes division by zero in lambda clamping path */
   /* For N=2, kappa=-2 triggers this edge case with small alpha */
-  rc = sr_ukf_set_scale(ukf, 1e-6, 2.0, -2.0);
+  rc = srukf_set_scale(ukf, 1e-6, 2.0, -2.0);
   assert(rc == lahReturnParameterError);
 
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_set_scale_err   OK\n");
 }
 
 /* Test 5: generate_sigma_points_from errors */
 static void test_sigma_points_errors(void) {
-  sr_ukf *ukf = sr_ukf_create(2, 1);
+  srukf *ukf = srukf_create(2, 1);
   assert(ukf);
 
   lah_Return rc;
@@ -202,50 +202,50 @@ static void test_sigma_points_errors(void) {
   assert(rc == lahReturnOk);
 
   lah_matFree(Xsig);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_sigma_pts_err   OK\n");
 }
 
-/* Test 6: sr_ukf_predict errors */
+/* Test 6: srukf_predict errors */
 static void test_predict_errors(void) {
-  sr_ukf *ukf = sr_ukf_create(2, 1);
+  srukf *ukf = srukf_create(2, 1);
   assert(ukf);
 
   /* Set noise (required for predict) */
   lah_mat *Q = alloc_unit_square(2);
   lah_mat *R = alloc_unit_square(1);
   assert(Q && R);
-  lah_Return rc = sr_ukf_set_noise(ukf, Q, R);
+  lah_Return rc = srukf_set_noise(ukf, Q, R);
   assert(rc == lahReturnOk);
 
   /* NULL ukf */
-  rc = sr_ukf_predict(NULL, process, NULL);
+  rc = srukf_predict(NULL, process, NULL);
   assert(rc == lahReturnParameterError);
 
   /* NULL process function */
-  rc = sr_ukf_predict(ukf, NULL, NULL);
+  rc = srukf_predict(ukf, NULL, NULL);
   assert(rc == lahReturnParameterError);
 
   /* Valid case */
-  rc = sr_ukf_predict(ukf, process, NULL);
+  rc = srukf_predict(ukf, process, NULL);
   assert(rc == lahReturnOk);
 
   lah_matFree(Q);
   lah_matFree(R);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_predict_err     OK\n");
 }
 
-/* Test 7: sr_ukf_correct errors */
+/* Test 7: srukf_correct errors */
 static void test_correct_errors(void) {
-  sr_ukf *ukf = sr_ukf_create(2, 1);
+  srukf *ukf = srukf_create(2, 1);
   assert(ukf);
 
   /* Set noise (required for correct) */
   lah_mat *Q = alloc_unit_square(2);
   lah_mat *R = alloc_unit_square(1);
   assert(Q && R);
-  lah_Return rc = sr_ukf_set_noise(ukf, Q, R);
+  lah_Return rc = srukf_set_noise(ukf, Q, R);
   assert(rc == lahReturnOk);
 
   lah_mat *z = allocMatrixNow(1, 1);
@@ -253,32 +253,32 @@ static void test_correct_errors(void) {
   LAH_ENTRY(z, 0, 0) = 0.0;
 
   /* NULL ukf */
-  rc = sr_ukf_correct(NULL, z, meas, NULL);
+  rc = srukf_correct(NULL, z, meas, NULL);
   assert(rc == lahReturnParameterError);
 
   /* NULL measurement */
-  rc = sr_ukf_correct(ukf, NULL, meas, NULL);
+  rc = srukf_correct(ukf, NULL, meas, NULL);
   assert(rc == lahReturnParameterError);
 
   /* NULL measurement function */
-  rc = sr_ukf_correct(ukf, z, NULL, NULL);
+  rc = srukf_correct(ukf, z, NULL, NULL);
   assert(rc == lahReturnParameterError);
 
   /* Wrong measurement dimension */
   lah_mat *z_wrong = allocMatrixNow(2, 1);
   assert(z_wrong);
-  rc = sr_ukf_correct(ukf, z_wrong, meas, NULL);
+  rc = srukf_correct(ukf, z_wrong, meas, NULL);
   assert(rc == lahReturnParameterError);
   lah_matFree(z_wrong);
 
   /* Valid case */
-  rc = sr_ukf_correct(ukf, z, meas, NULL);
+  rc = srukf_correct(ukf, z, meas, NULL);
   assert(rc == lahReturnOk);
 
   lah_matFree(z);
   lah_matFree(Q);
   lah_matFree(R);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_correct_err     OK\n");
 }
 
@@ -386,22 +386,22 @@ static void test_diag_callback(const char *msg) {
 
 /* Test 10: callback validation - NaN/Inf detection */
 static void test_callback_validation(void) {
-  sr_ukf *ukf = sr_ukf_create(2, 1);
+  srukf *ukf = srukf_create(2, 1);
   assert(ukf);
 
   /* Set noise (required for predict/correct) */
   lah_mat *Q = alloc_unit_square(2);
   lah_mat *R = alloc_unit_square(1);
   assert(Q && R);
-  lah_Return rc = sr_ukf_set_noise(ukf, Q, R);
+  lah_Return rc = srukf_set_noise(ukf, Q, R);
   assert(rc == lahReturnOk);
 
   /* Enable diagnostic callback */
   g_diag_count = 0;
-  sr_ukf_set_diag_callback(test_diag_callback);
+  srukf_set_diag_callback(test_diag_callback);
 
   /* predict with callback that returns NaN should fail */
-  rc = sr_ukf_predict(ukf, process_nan, NULL);
+  rc = srukf_predict(ukf, process_nan, NULL);
   assert(rc == lahReturnMathError);
   assert(g_diag_count == 1); /* diagnostic should have been called */
 
@@ -409,40 +409,40 @@ static void test_callback_validation(void) {
   lah_mat *z = allocMatrixNow(1, 1);
   assert(z);
   LAH_ENTRY(z, 0, 0) = 0.0;
-  rc = sr_ukf_correct(ukf, z, meas_inf, NULL);
+  rc = srukf_correct(ukf, z, meas_inf, NULL);
   assert(rc == lahReturnMathError);
   assert(g_diag_count == 2); /* diagnostic should have been called again */
 
   /* Disable callback */
-  sr_ukf_set_diag_callback(NULL);
+  srukf_set_diag_callback(NULL);
 
   lah_matFree(z);
   lah_matFree(Q);
   lah_matFree(R);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
   printf("  test_callback_valid  OK\n");
 }
 
-/* Test 11: sr_ukf_create_from_noise errors */
+/* Test 11: srukf_create_from_noise errors */
 static void test_create_from_noise_errors(void) {
   lah_mat *Q = alloc_unit_square(2);
   lah_mat *R = alloc_unit_square(1);
   assert(Q && R);
 
-  sr_ukf *ukf;
+  srukf *ukf;
 
   /* NULL Q */
-  ukf = sr_ukf_create_from_noise(NULL, R);
+  ukf = srukf_create_from_noise(NULL, R);
   assert(ukf == NULL);
 
   /* NULL R */
-  ukf = sr_ukf_create_from_noise(Q, NULL);
+  ukf = srukf_create_from_noise(Q, NULL);
   assert(ukf == NULL);
 
   /* Valid case */
-  ukf = sr_ukf_create_from_noise(Q, R);
+  ukf = srukf_create_from_noise(Q, R);
   assert(ukf != NULL);
-  sr_ukf_free(ukf);
+  srukf_free(ukf);
 
   lah_matFree(Q);
   lah_matFree(R);
