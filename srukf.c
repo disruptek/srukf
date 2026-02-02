@@ -197,26 +197,19 @@ struct srukf_workspace {
   srukf_mat *Ysig_N; /**< N x (2N+1) - sigma points after process model */
   srukf_mat *x_pred; /**< N x 1 - predicted state mean */
   srukf_mat *S_tmp;  /**< N x N - temporary for atomic update */
-  srukf_mat *P_pred; /**< N x N - (unused, kept for compatibility) */
-  srukf_mat *Qfull;  /**< N x N - (unused, kept for compatibility) */
   /** @} */
 
   /** @name Correct Temporaries
    *  @{ */
   srukf_mat *Ysig_M; /**< M x (2N+1) - sigma points in measurement space */
   srukf_mat *y_mean; /**< M x 1 - predicted measurement mean */
-  srukf_mat *Pyy;    /**< M x M - (unused, we use Syy instead) */
   srukf_mat *Pxz; /**< N x M - cross-covariance between state and measurement */
   srukf_mat *K;   /**< N x M - Kalman gain */
   srukf_mat *innov; /**< M x 1 - innovation (z - z_predicted) */
-  srukf_mat *P_new; /**< N x N - (unused) */
   srukf_mat *x_new; /**< N x 1 - updated state (for atomic update) */
   srukf_mat *S_new; /**< N x N - updated sqrt-covariance (for atomic update) */
-  srukf_mat *Rtmp;  /**< M x M - (unused) */
   srukf_mat *dx;    /**< N x 1 - state correction K * innovation */
   srukf_mat *tmp1;  /**< N x M - temp for K * Syy product */
-  srukf_mat *Kt;    /**< M x N - (unused) */
-  srukf_mat *tmp2;  /**< N x N - (unused) */
   /** @} */
 
   /** @name SR-UKF Specific
@@ -255,22 +248,15 @@ void srukf_free_workspace(srukf *ukf) {
   srukf_mat_free(ws->Ysig_N);
   srukf_mat_free(ws->x_pred);
   srukf_mat_free(ws->S_tmp);
-  srukf_mat_free(ws->P_pred);
-  srukf_mat_free(ws->Qfull);
   srukf_mat_free(ws->Ysig_M);
   srukf_mat_free(ws->y_mean);
-  srukf_mat_free(ws->Pyy);
   srukf_mat_free(ws->Pxz);
   srukf_mat_free(ws->K);
   srukf_mat_free(ws->innov);
-  srukf_mat_free(ws->P_new);
   srukf_mat_free(ws->x_new);
   srukf_mat_free(ws->S_new);
-  srukf_mat_free(ws->Rtmp);
   srukf_mat_free(ws->dx);
   srukf_mat_free(ws->tmp1);
-  srukf_mat_free(ws->Kt);
-  srukf_mat_free(ws->tmp2);
   srukf_mat_free(ws->Dev_N);
   srukf_mat_free(ws->Dev_M);
   srukf_mat_free(ws->qr_work_N);
@@ -321,22 +307,15 @@ srukf_return srukf_alloc_workspace(srukf *ukf) {
   ws->Ysig_N = SRUKF_MAT_ALLOC(N, n_sigma);
   ws->x_pred = SRUKF_MAT_ALLOC(N, 1);
   ws->S_tmp = SRUKF_MAT_ALLOC(N, N);
-  ws->P_pred = SRUKF_MAT_ALLOC(N, N);
-  ws->Qfull = SRUKF_MAT_ALLOC(N, N);
   ws->Ysig_M = SRUKF_MAT_ALLOC(M, n_sigma);
   ws->y_mean = SRUKF_MAT_ALLOC(M, 1);
-  ws->Pyy = SRUKF_MAT_ALLOC(M, M);
   ws->Pxz = SRUKF_MAT_ALLOC(N, M);
   ws->K = SRUKF_MAT_ALLOC(N, M);
   ws->innov = SRUKF_MAT_ALLOC(M, 1);
-  ws->P_new = SRUKF_MAT_ALLOC(N, N);
   ws->x_new = SRUKF_MAT_ALLOC(N, 1);
   ws->S_new = SRUKF_MAT_ALLOC(N, N);
-  ws->Rtmp = SRUKF_MAT_ALLOC(M, M);
   ws->dx = SRUKF_MAT_ALLOC(N, 1);
   ws->tmp1 = SRUKF_MAT_ALLOC(N, M);
-  ws->Kt = SRUKF_MAT_ALLOC(M, N);
-  ws->tmp2 = SRUKF_MAT_ALLOC(N, N);
 
   /* SR-UKF specific matrices */
   ws->Dev_N = SRUKF_MAT_ALLOC(N, n_sigma);
@@ -355,13 +334,11 @@ srukf_return srukf_alloc_workspace(srukf *ukf) {
   ws->dev0_M = (srukf_value *)calloc(M, sizeof(srukf_value));
 
   /* Check all allocations succeeded */
-  if (!ws->Xsig || !ws->Ysig_N || !ws->x_pred || !ws->S_tmp || !ws->P_pred ||
-      !ws->Qfull || !ws->Ysig_M || !ws->y_mean || !ws->Pyy || !ws->Pxz ||
-      !ws->K || !ws->innov || !ws->P_new || !ws->x_new || !ws->S_new ||
-      !ws->Rtmp || !ws->dx || !ws->tmp1 || !ws->Kt || !ws->tmp2 || !ws->Dev_N ||
-      !ws->Dev_M || !ws->qr_work_N || !ws->qr_work_M || !ws->Syy ||
-      !ws->tau_N || !ws->tau_M || !ws->downdate_work || !ws->dev0_N ||
-      !ws->dev0_M) {
+  if (!ws->Xsig || !ws->Ysig_N || !ws->x_pred || !ws->S_tmp || !ws->Ysig_M ||
+      !ws->y_mean || !ws->Pxz || !ws->K || !ws->innov || !ws->x_new ||
+      !ws->S_new || !ws->dx || !ws->tmp1 || !ws->Dev_N || !ws->Dev_M ||
+      !ws->qr_work_N || !ws->qr_work_M || !ws->Syy || !ws->tau_N ||
+      !ws->tau_M || !ws->downdate_work || !ws->dev0_N || !ws->dev0_M) {
     ukf->ws = ws; /* Temporarily assign so free_workspace can clean up */
     srukf_free_workspace(ukf);
     return SRUKF_RETURN_PARAMETER_ERROR;

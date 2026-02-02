@@ -26,3 +26,43 @@ jobs:
 
       - name: Run benchmarks
         run: make bench
+
+  # AddressSanitizer + LeakSanitizer (advisory - doesn't block PRs)
+  sanitize-address:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Build with AddressSanitizer
+        run: |
+          make clean
+          make test CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -fPIC -I. -DHAVE_LAPACK -fsanitize=address -fno-omit-frame-pointer" LDFLAGS="-lm -llapacke -lblas -lopenblas -fsanitize=address"
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+
+  # UndefinedBehaviorSanitizer (advisory - doesn't block PRs)
+  sanitize-undefined:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Build with UBSan
+        run: |
+          make clean
+          make test CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -fPIC -I. -DHAVE_LAPACK -fsanitize=undefined -fno-omit-frame-pointer" LDFLAGS="-lm -llapacke -lblas -lopenblas -fsanitize=undefined"
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1

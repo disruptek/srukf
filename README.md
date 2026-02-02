@@ -1,5 +1,7 @@
 # srukf
 
+[![CI](https://github.com/disruptek/srukf/actions/workflows/ci.yml/badge.svg)](https://github.com/disruptek/srukf/actions/workflows/ci.yml)
+
 C implementation of the Square-Root Unscented Kalman Filter.
 
 ## When to Use SR-UKF
@@ -65,8 +67,20 @@ Typical performance on modern hardware (times in microseconds per operation).
 The `correct` step is more expensive than `predict` because it involves
 computing the Kalman gain and performing multiple Cholesky downdates.
 
-Run `make bench` to benchmark on your system, or `make bench-chart` to
-regenerate the chart.
+![SR-UKF Memory](benchmark/memory.svg)
+
+Memory usage scales with state and measurement dimensions. Green bars show
+total allocated bytes (filter + workspace); gray bars show actual RSS, which
+is often lower due to Linux lazy allocation (pages aren't mapped until touched).
+The allocated value is authoritative for capacity planning.
+
+Workspace memory can be pre-allocated via `srukf_alloc_workspace()` to avoid
+malloc during filtering, or left to allocate on first use. Pre-allocation is
+recommended for real-time systems; lazy allocation suits memory-constrained
+environments where filters may not all be used.
+
+Run `make bench` / `make bench-memory` to benchmark on your system, or
+`make bench-chart` / `make bench-memory-chart` to regenerate the charts.
 
 ## Requirements
 

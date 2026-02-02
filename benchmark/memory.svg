@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 590 370" font-family="system-ui, -apple-system, sans-serif">
+  <rect width="590" height="370" fill="#ffffff"/>
+  <text x="295.0" y="24" text-anchor="middle" font-size="16" font-weight="600" fill="#333">SR-UKF Memory Usage</text>
+  <line x1="70" y1="310.0" x2="570" y2="310.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="62" y="314.0" text-anchor="end" font-size="11" fill="#666">0</text>
+  <line x1="70" y1="260.0" x2="570" y2="260.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="62" y="264.0" text-anchor="end" font-size="11" fill="#666">14</text>
+  <line x1="70" y1="210.0" x2="570" y2="210.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="62" y="214.0" text-anchor="end" font-size="11" fill="#666">28</text>
+  <line x1="70" y1="160.0" x2="570" y2="160.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="62" y="164.0" text-anchor="end" font-size="11" fill="#666">42</text>
+  <line x1="70" y1="110.0" x2="570" y2="110.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="62" y="114.0" text-anchor="end" font-size="11" fill="#666">57</text>
+  <line x1="70" y1="60.0" x2="570" y2="60.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="62" y="64.0" text-anchor="end" font-size="11" fill="#666">71</text>
+  <text x="18" y="185.0" text-anchor="middle" font-size="12" fill="#666" transform="rotate(-90, 18, 185.0)">Memory (KB)</text>
+  <rect x="80.0" y="298.5732479569816" width="35.0" height="11.42675204301836" fill="#2d7d2d" rx="2"/>
+  <text x="97.5" y="294.5732479569816" text-anchor="middle" font-size="9" fill="#666">3</text>
+  <rect x="120.0" y="292.59454487565006" width="35.0" height="17.40545512434995" fill="#b0b0b0" rx="2"/>
+  <text x="137.5" y="288.59454487565006" text-anchor="middle" font-size="9" fill="#666">5</text>
+  <text x="117.5" y="330" text-anchor="middle" font-size="11" fill="#333">3x2</text>
+  <rect x="180.0" y="283.92719425478475" width="35.0" height="26.07280574521527" fill="#2d7d2d" rx="2"/>
+  <text x="197.5" y="279.92719425478475" text-anchor="middle" font-size="9" fill="#666">7</text>
+  <rect x="220.0" y="294.9294230020872" width="35.0" height="15.070576997912758" fill="#b0b0b0" rx="2"/>
+  <text x="237.5" y="290.9294230020872" text-anchor="middle" font-size="9" fill="#666">4</text>
+  <text x="217.5" y="330" text-anchor="middle" font-size="11" fill="#333">6x3</text>
+  <rect x="280.0" y="249.43467647787173" width="35.0" height="60.565323522128274" fill="#2d7d2d" rx="2"/>
+  <text x="297.5" y="245.43467647787173" text-anchor="middle" font-size="9" fill="#666">17</text>
+  <rect x="320.0" y="275.4367283404677" width="35.0" height="34.56327165953231" fill="#b0b0b0" rx="2"/>
+  <text x="337.5" y="271.4367283404677" text-anchor="middle" font-size="9" fill="#666">10</text>
+  <text x="317.5" y="330" text-anchor="middle" font-size="11" fill="#333">10x5</text>
+  <rect x="380.0" y="181.01567198500018" width="35.0" height="128.98432801499982" fill="#2d7d2d" rx="2"/>
+  <text x="397.5" y="177.01567198500018" text-anchor="middle" font-size="9" fill="#666">36</text>
+  <rect x="420.0" y="241.6871263310574" width="35.0" height="68.31287366894257" fill="#b0b0b0" rx="2"/>
+  <text x="437.5" y="237.6871263310574" text-anchor="middle" font-size="9" fill="#666">19</text>
+  <text x="417.5" y="330" text-anchor="middle" font-size="11" fill="#333">15x8</text>
+  <rect x="480.0" y="92.6086956521739" width="35.0" height="217.3913043478261" fill="#2d7d2d" rx="2"/>
+  <text x="497.5" y="88.6086956521739" text-anchor="middle" font-size="9" fill="#666">61</text>
+  <rect x="520.0" y="221.13312343014823" width="35.0" height="88.86687656985177" fill="#b0b0b0" rx="2"/>
+  <text x="537.5" y="217.13312343014823" text-anchor="middle" font-size="9" fill="#666">25</text>
+  <text x="517.5" y="330" text-anchor="middle" font-size="11" fill="#333">20x10</text>
+  <text x="320.0" y="360" text-anchor="middle" font-size="12" fill="#666">State × Measurement Dimensions</text>
+  <rect x="425" y="38" width="12" height="12" fill="#2d7d2d" rx="2"/>
+  <text x="441" y="48" font-size="11" fill="#333">allocated</text>
+  <rect x="500" y="38" width="12" height="12" fill="#b0b0b0" rx="2"/>
+  <text x="516" y="48" font-size="11" fill="#333">resident</text>
+  <line x1="70" y1="60" x2="70" y2="310" stroke="#333" stroke-width="1"/>
+  <line x1="70" y1="310" x2="570" y2="310" stroke="#333" stroke-width="1"/>
+</svg>

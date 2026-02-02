@@ -47,15 +47,20 @@ $(BIN_DIR)/$(SINGLE_PREC_TEST).out: $(TEST_DIR)/$(SINGLE_PREC_TEST).c $(LIB_SRCS
 $(BIN_DIR)/%.out: $(TEST_DIR)/%.c $(LIB_NAME) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $@ $< $(TEST_LD)
 
-# Benchmark
+# Benchmarks
 BENCH_DIR   := $(SR_DIR)/benchmark
 BENCH_SRC   := $(BENCH_DIR)/benchmark.c
 BENCH_BIN   := $(BIN_DIR)/benchmark.out
+MEM_BENCH_SRC := $(BENCH_DIR)/memory_bench.c
+MEM_BENCH_BIN := $(BIN_DIR)/memory_bench.out
 
 $(BENCH_BIN): $(BENCH_SRC) $(LIB_NAME) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $@ $< $(TEST_LD)
 
-.PHONY: all test test-verbose lib clean format bench bench-chart install coverage docs
+$(MEM_BENCH_BIN): $(MEM_BENCH_SRC) $(LIB_NAME) | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(TEST_LD)
+
+.PHONY: all test test-verbose lib clean format bench bench-chart bench-memory bench-memory-chart install coverage docs
 all: lib test
 
 lib: $(LIB_NAME)
@@ -96,6 +101,13 @@ bench-chart: $(BENCH_BIN)
 	$(BENCH_BIN) | python3 benchmark/generate_chart.py > benchmark/benchmark.svg
 	@echo "Generated benchmark/benchmark.svg"
 
+bench-memory: $(MEM_BENCH_BIN)
+	$(MEM_BENCH_BIN)
+
+bench-memory-chart: $(MEM_BENCH_BIN)
+	$(MEM_BENCH_BIN) | python3 benchmark/generate_memory_chart.py > benchmark/memory.svg
+	@echo "Generated benchmark/memory.svg"
+
 install: lib
 	install -d $(PREFIX)/lib $(PREFIX)/include
 	install -m 644 $(LIB_NAME) $(PREFIX)/lib/
@@ -113,7 +125,7 @@ docs:
 	@echo "Documentation generated in docs/html/"
 
 clean:
-	rm -f $(LIB_NAME) $(TEST_BINS) $(BENCH_BIN)
+	rm -f $(LIB_NAME) $(TEST_BINS) $(BENCH_BIN) $(MEM_BENCH_BIN)
 	rm -f *.gcno *.gcda *.gcov coverage.info
 	rm -rf coverage-report docs
 	rmdir --ignore-fail-on-non-empty $(BIN_DIR) 2>/dev/null || true
