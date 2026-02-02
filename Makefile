@@ -60,7 +60,7 @@ $(BENCH_BIN): $(BENCH_SRC) $(LIB_NAME) | $(BIN_DIR)
 $(MEM_BENCH_BIN): $(MEM_BENCH_SRC) $(LIB_NAME) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $@ $< $(TEST_LD)
 
-.PHONY: all test test-verbose lib clean format bench bench-chart bench-memory bench-memory-chart install coverage docs
+.PHONY: all test test-verbose lib clean format bench bench-chart bench-memory bench-memory-chart install coverage docs docs-serve docs-clean
 all: lib test
 
 lib: $(LIB_NAME)
@@ -121,11 +121,29 @@ coverage: clean lib $(TEST_BINS)
 	@echo "Coverage report in srukf.c.gcov"
 
 docs:
-	doxygen Doxyfile
-	@echo "Documentation generated in docs/html/"
+	@echo "Generating Doxygen documentation (HTML + Markdown)..."
+	doxygen docs/Doxyfile
+	@echo "Building MkDocs site..."
+	mkdocs build -f docs/mkdocs.yml
+	@echo "✓ Documentation generated:"
+	@echo "  Landing page: docs/index.html"
+	@echo "  Doxygen HTML: docs/doxygen/html/"
+	@echo "  MkDocs site:  docs/mkdocs/site/"
+
+docs-serve:
+	@echo "Starting local documentation preview..."
+	@echo "  Landing page: http://localhost:8000/"
+	@echo "  Doxygen:      http://localhost:8000/doxygen/html/"
+	@echo "  MkDocs:       http://localhost:8001/"
+	@echo ""
+	@(cd docs && python3 -m http.server 8000 > /dev/null 2>&1) & \
+	mkdocs serve -f docs/mkdocs.yml -a localhost:8001
+
+docs-clean:
+	rm -rf docs/doxygen docs/mkdocs
 
 clean:
 	rm -f $(LIB_NAME) $(TEST_BINS) $(BENCH_BIN) $(MEM_BENCH_BIN)
 	rm -f *.gcno *.gcda *.gcov coverage.info
-	rm -rf coverage-report docs
+	rm -rf coverage-report docs/doxygen docs/mkdocs
 	rmdir --ignore-fail-on-non-empty $(BIN_DIR) 2>/dev/null || true

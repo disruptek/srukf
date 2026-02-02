@@ -9,7 +9,13 @@ coverage.info
 coverage-report/
 
 # Generated documentation
-docs/
+docs/*
+!docs/index.html
+!docs/header.html
+!docs/mkdocs.yml
+!docs/Doxyfile
+!docs/doxygen-awesome-css/
+!docs/src/
 
 # Editor/IDE
 *.swp
@@ -23,3 +29,11 @@ vendor/lah/*.o
 # lsp
 compile_commands.json
 .cache
+
+# Local build tools (for testing)
+.venv/
+tmp/doxygen-*
+
+# Generated Doxygen template files (we only use header.html)
+docs/footer.html
+customdoxygen.css

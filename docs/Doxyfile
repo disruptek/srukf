@@ -7,7 +7,7 @@
 PROJECT_NAME           = "SR-UKF"
 PROJECT_BRIEF          = "Square-Root Unscented Kalman Filter Library"
 PROJECT_NUMBER         = "1.0"
-OUTPUT_DIRECTORY       = docs
+OUTPUT_DIRECTORY       = docs/doxygen
 
 #---------------------------------------------------------------------------
 # Input settings
@@ -24,12 +24,24 @@ GENERATE_LATEX         = NO
 GENERATE_MAN           = NO
 HTML_OUTPUT            = html
 
-# Modern, clean HTML output
+# Modern, clean HTML output with Doxygen Awesome theme
 HTML_COLORSTYLE        = LIGHT
 HTML_DYNAMIC_SECTIONS  = YES
 DISABLE_INDEX          = NO
 GENERATE_TREEVIEW      = YES
 FULL_SIDEBAR           = NO
+
+# Doxygen Awesome CSS theme
+HTML_EXTRA_STYLESHEET  = docs/doxygen-awesome-css/doxygen-awesome.css \
+                         docs/doxygen-awesome-css/doxygen-awesome-sidebar-only.css \
+                         docs/doxygen-awesome-css/doxygen-awesome-sidebar-only-darkmode-toggle.css
+
+HTML_EXTRA_FILES       = docs/doxygen-awesome-css/doxygen-awesome-darkmode-toggle.js \
+                         docs/doxygen-awesome-css/doxygen-awesome-fragment-copy-button.js \
+                         docs/doxygen-awesome-css/doxygen-awesome-paragraph-link.js \
+                         docs/doxygen-awesome-css/doxygen-awesome-interactive-toc.js
+
+HTML_HEADER            = docs/header.html
 
 #---------------------------------------------------------------------------
 # Documentation extraction
