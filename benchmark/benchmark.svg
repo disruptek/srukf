@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 370" font-family="system-ui, -apple-system, sans-serif">
+  <rect width="580" height="370" fill="#ffffff"/>
+  <text x="290.0" y="24" text-anchor="middle" font-size="16" font-weight="600" fill="#333">SR-UKF Performance (lower is better)</text>
+  <line x1="60" y1="310.0" x2="560" y2="310.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="52" y="314.0" text-anchor="end" font-size="11" fill="#666">0</text>
+  <line x1="60" y1="260.0" x2="560" y2="260.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="52" y="264.0" text-anchor="end" font-size="11" fill="#666">4</text>
+  <line x1="60" y1="210.0" x2="560" y2="210.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="52" y="214.0" text-anchor="end" font-size="11" fill="#666">9</text>
+  <line x1="60" y1="160.0" x2="560" y2="160.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="52" y="164.0" text-anchor="end" font-size="11" fill="#666">13</text>
+  <line x1="60" y1="110.0" x2="560" y2="110.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="52" y="114.0" text-anchor="end" font-size="11" fill="#666">18</text>
+  <line x1="60" y1="60.0" x2="560" y2="60.0" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="52" y="64.0" text-anchor="end" font-size="11" fill="#666">22</text>
+  <text x="15" y="185.0" text-anchor="middle" font-size="12" fill="#666" transform="rotate(-90, 15, 185.0)">Time (μs)</text>
+  <rect x="70.0" y="306.06955747306625" width="35.0" height="3.9304425269337537" fill="#4a90d9" rx="2"/>
+  <text x="87.5" y="302.06955747306625" text-anchor="middle" font-size="9" fill="#666">0.3</text>
+  <rect x="110.0" y="298.3677076659533" width="35.0" height="11.632292334046719" fill="#d94a4a" rx="2"/>
+  <text x="127.5" y="294.3677076659533" text-anchor="middle" font-size="9" fill="#666">1.0</text>
+  <text x="107.5" y="330" text-anchor="middle" font-size="11" fill="#333">3x2</text>
+  <rect x="170.0" y="300.5601221390695" width="35.0" height="9.43987786093049" fill="#4a90d9" rx="2"/>
+  <text x="187.5" y="296.5601221390695" text-anchor="middle" font-size="9" fill="#666">0.8</text>
+  <rect x="210.0" y="291.0180073337968" width="35.0" height="18.98199266620319" fill="#d94a4a" rx="2"/>
+  <text x="227.5" y="287.0180073337968" text-anchor="middle" font-size="9" fill="#666">1.7</text>
+  <text x="207.5" y="330" text-anchor="middle" font-size="11" fill="#333">6x3</text>
+  <rect x="270.0" y="289.200461656602" width="35.0" height="20.79953834339799" fill="#4a90d9" rx="2"/>
+  <text x="287.5" y="285.200461656602" text-anchor="middle" font-size="9" fill="#666">1.8</text>
+  <rect x="310.0" y="268.06013349873" width="35.0" height="41.939866501270004" fill="#d94a4a" rx="2"/>
+  <text x="327.5" y="264.06013349873" text-anchor="middle" font-size="9" fill="#666">3.7</text>
+  <text x="307.5" y="330" text-anchor="middle" font-size="11" fill="#333">10x5</text>
+  <rect x="370.0" y="263.91385742262935" width="35.0" height="46.08614257737065" fill="#4a90d9" rx="2"/>
+  <text x="387.5" y="259.91385742262935" text-anchor="middle" font-size="9" fill="#666">4.1</text>
+  <rect x="410.0" y="207.39954652235355" width="35.0" height="102.60045347764644" fill="#d94a4a" rx="2"/>
+  <text x="427.5" y="203.39954652235355" text-anchor="middle" font-size="9" fill="#666">9.0</text>
+  <text x="407.5" y="330" text-anchor="middle" font-size="11" fill="#333">15x8</text>
+  <rect x="470.0" y="221.87175397701714" width="35.0" height="88.12824602298285" fill="#4a90d9" rx="2"/>
+  <text x="487.5" y="217.87175397701714" text-anchor="middle" font-size="9" fill="#666">7.8</text>
+  <rect x="510.0" y="82.72727272727275" width="35.0" height="227.27272727272725" fill="#d94a4a" rx="2"/>
+  <text x="527.5" y="78.72727272727275" text-anchor="middle" font-size="9" fill="#666">20.0</text>
+  <text x="507.5" y="330" text-anchor="middle" font-size="11" fill="#333">20x10</text>
+  <text x="310.0" y="360" text-anchor="middle" font-size="12" fill="#666">State × Measurement Dimensions</text>
+  <rect x="430" y="38" width="12" height="12" fill="#4a90d9" rx="2"/>
+  <text x="446" y="48" font-size="11" fill="#333">predict</text>
+  <rect x="500" y="38" width="12" height="12" fill="#d94a4a" rx="2"/>
+  <text x="516" y="48" font-size="11" fill="#333">correct</text>
+  <line x1="60" y1="60" x2="60" y2="310" stroke="#333" stroke-width="1"/>
+  <line x1="60" y1="310" x2="560" y2="310" stroke="#333" stroke-width="1"/>
+</svg>

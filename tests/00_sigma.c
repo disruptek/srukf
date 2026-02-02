@@ -12,31 +12,31 @@
 #define EPS 1e-12
 
 /* Helper: verify sigma points structure */
-static void verify_sigma_points(srukf *f, lah_mat *Xsig) {
-  lah_index N = f->x->nR;
-  lah_value gamma = sqrt((lah_value)N + f->lambda);
+static void verify_sigma_points(srukf *f, srukf_mat *Xsig) {
+  srukf_index N = f->x->n_rows;
+  srukf_value gamma = sqrt((srukf_value)N + f->lambda);
 
   /* First column must equal state mean */
-  for (lah_index i = 0; i < N; i++)
-    assert(fabs(LAH_ENTRY(Xsig, i, 0) - LAH_ENTRY(f->x, i, 0)) < EPS);
+  for (srukf_index i = 0; i < N; i++)
+    assert(fabs(SRUKF_ENTRY(Xsig, i, 0) - SRUKF_ENTRY(f->x, i, 0)) < EPS);
 
   /* Columns 1..N: x + gamma * S(:,k) */
   /* Columns N+1..2N: x - gamma * S(:,k) */
-  for (lah_index k = 0; k < N; k++) {
-    for (lah_index i = 0; i < N; i++) {
-      lah_value plus = LAH_ENTRY(f->x, i, 0) + gamma * LAH_ENTRY(f->S, i, k);
-      lah_value minus = LAH_ENTRY(f->x, i, 0) - gamma * LAH_ENTRY(f->S, i, k);
-      assert(fabs(LAH_ENTRY(Xsig, i, k + 1) - plus) < EPS);
-      assert(fabs(LAH_ENTRY(Xsig, i, k + 1 + N) - minus) < EPS);
+  for (srukf_index k = 0; k < N; k++) {
+    for (srukf_index i = 0; i < N; i++) {
+      srukf_value plus = SRUKF_ENTRY(f->x, i, 0) + gamma * SRUKF_ENTRY(f->S, i, k);
+      srukf_value minus = SRUKF_ENTRY(f->x, i, 0) - gamma * SRUKF_ENTRY(f->S, i, k);
+      assert(fabs(SRUKF_ENTRY(Xsig, i, k + 1) - plus) < EPS);
+      assert(fabs(SRUKF_ENTRY(Xsig, i, k + 1 + N) - minus) < EPS);
     }
   }
 
   /* Verify symmetry: sigma points should be symmetric around mean */
-  for (lah_index k = 0; k < N; k++) {
-    for (lah_index i = 0; i < N; i++) {
-      lah_value diff_plus = LAH_ENTRY(Xsig, i, k + 1) - LAH_ENTRY(f->x, i, 0);
-      lah_value diff_minus =
-          LAH_ENTRY(Xsig, i, k + 1 + N) - LAH_ENTRY(f->x, i, 0);
+  for (srukf_index k = 0; k < N; k++) {
+    for (srukf_index i = 0; i < N; i++) {
+      srukf_value diff_plus = SRUKF_ENTRY(Xsig, i, k + 1) - SRUKF_ENTRY(f->x, i, 0);
+      srukf_value diff_minus =
+          SRUKF_ENTRY(Xsig, i, k + 1 + N) - SRUKF_ENTRY(f->x, i, 0);
       assert(fabs(diff_plus + diff_minus) < EPS); /* should sum to zero */
     }
   }
@@ -48,25 +48,25 @@ static void test_basic_3d(void) {
   assert(f && f->x && f->S);
 
   /* Set state */
-  LAH_ENTRY(f->x, 0, 0) = 1.0;
-  LAH_ENTRY(f->x, 1, 0) = 2.0;
-  LAH_ENTRY(f->x, 2, 0) = 3.0;
+  SRUKF_ENTRY(f->x, 0, 0) = 1.0;
+  SRUKF_ENTRY(f->x, 1, 0) = 2.0;
+  SRUKF_ENTRY(f->x, 2, 0) = 3.0;
 
   /* Set diagonal covariance sqrt */
-  for (lah_index i = 0; i < 3; i++)
-    for (lah_index j = 0; j < 3; j++)
-      LAH_ENTRY(f->S, i, j) = (i == j) ? 0.1 : 0.0;
+  for (srukf_index i = 0; i < 3; i++)
+    for (srukf_index j = 0; j < 3; j++)
+      SRUKF_ENTRY(f->S, i, j) = (i == j) ? 0.1 : 0.0;
 
   srukf_set_scale(f, 1e-3, 2.0, 0.0);
 
-  lah_mat *Xsig = allocMatrixNow(3, 7); /* N=3, 2N+1=7 */
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(3, 7); /* N=3, 2N+1=7 */
   assert(Xsig);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_basic_3d      OK\n");
 }
@@ -76,58 +76,58 @@ static void test_1d(void) {
   srukf *f = srukf_create(1, 1);
   assert(f);
 
-  LAH_ENTRY(f->x, 0, 0) = 5.0;
-  LAH_ENTRY(f->S, 0, 0) = 0.5;
+  SRUKF_ENTRY(f->x, 0, 0) = 5.0;
+  SRUKF_ENTRY(f->S, 0, 0) = 0.5;
 
   srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_mat *Xsig = allocMatrixNow(1, 3); /* N=1, 2N+1=3 */
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(1, 3); /* N=1, 2N+1=3 */
   assert(Xsig);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
   /* For 1D: sigma points should be [mean, mean+gamma*s, mean-gamma*s] */
-  lah_value gamma = sqrt(1.0 + f->lambda);
-  assert(fabs(LAH_ENTRY(Xsig, 0, 0) - 5.0) < EPS);
-  assert(fabs(LAH_ENTRY(Xsig, 0, 1) - (5.0 + gamma * 0.5)) < EPS);
-  assert(fabs(LAH_ENTRY(Xsig, 0, 2) - (5.0 - gamma * 0.5)) < EPS);
+  srukf_value gamma = sqrt(1.0 + f->lambda);
+  assert(fabs(SRUKF_ENTRY(Xsig, 0, 0) - 5.0) < EPS);
+  assert(fabs(SRUKF_ENTRY(Xsig, 0, 1) - (5.0 + gamma * 0.5)) < EPS);
+  assert(fabs(SRUKF_ENTRY(Xsig, 0, 2) - (5.0 - gamma * 0.5)) < EPS);
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_1d            OK\n");
 }
 
 /* Test 3: Higher dimension (10D) */
 static void test_10d(void) {
-  lah_index N = 10;
+  srukf_index N = 10;
   srukf *f = srukf_create((int)N, 5);
   assert(f);
 
   /* Set state to [1, 2, 3, ..., 10] */
-  for (lah_index i = 0; i < N; i++)
-    LAH_ENTRY(f->x, i, 0) = (lah_value)(i + 1);
+  for (srukf_index i = 0; i < N; i++)
+    SRUKF_ENTRY(f->x, i, 0) = (srukf_value)(i + 1);
 
   /* Set diagonal covariance sqrt with varying values */
-  for (lah_index i = 0; i < N; i++)
-    for (lah_index j = 0; j < N; j++)
-      LAH_ENTRY(f->S, i, j) = (i == j) ? 0.1 * (i + 1) : 0.0;
+  for (srukf_index i = 0; i < N; i++)
+    for (srukf_index j = 0; j < N; j++)
+      SRUKF_ENTRY(f->S, i, j) = (i == j) ? 0.1 * (i + 1) : 0.0;
 
   srukf_set_scale(f, 0.5, 2.0, 1.0);
 
-  lah_mat *Xsig = allocMatrixNow(N, 2 * N + 1);
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(N, 2 * N + 1);
   assert(Xsig);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
   /* Verify dimensions */
-  assert(Xsig->nR == N);
-  assert(Xsig->nC == 2 * N + 1);
+  assert(Xsig->n_rows == N);
+  assert(Xsig->n_cols == 2 * N + 1);
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_10d           OK\n");
 }
@@ -138,28 +138,28 @@ static void test_zero_state(void) {
   assert(f);
 
   /* State is zero */
-  for (lah_index i = 0; i < 3; i++)
-    LAH_ENTRY(f->x, i, 0) = 0.0;
+  for (srukf_index i = 0; i < 3; i++)
+    SRUKF_ENTRY(f->x, i, 0) = 0.0;
 
   /* Identity covariance sqrt */
-  for (lah_index i = 0; i < 3; i++)
-    for (lah_index j = 0; j < 3; j++)
-      LAH_ENTRY(f->S, i, j) = (i == j) ? 1.0 : 0.0;
+  for (srukf_index i = 0; i < 3; i++)
+    for (srukf_index j = 0; j < 3; j++)
+      SRUKF_ENTRY(f->S, i, j) = (i == j) ? 1.0 : 0.0;
 
   srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_mat *Xsig = allocMatrixNow(3, 7);
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(3, 7);
   assert(Xsig);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
   /* First column should be zeros */
-  for (lah_index i = 0; i < 3; i++)
-    assert(fabs(LAH_ENTRY(Xsig, i, 0)) < EPS);
+  for (srukf_index i = 0; i < 3; i++)
+    assert(fabs(SRUKF_ENTRY(Xsig, i, 0)) < EPS);
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_zero_state    OK\n");
 }
@@ -169,35 +169,35 @@ static void test_alpha_variations(void) {
   srukf *f = srukf_create(2, 1);
   assert(f);
 
-  LAH_ENTRY(f->x, 0, 0) = 1.0;
-  LAH_ENTRY(f->x, 1, 0) = 2.0;
-  LAH_ENTRY(f->S, 0, 0) = 0.5;
-  LAH_ENTRY(f->S, 1, 1) = 0.5;
-  LAH_ENTRY(f->S, 0, 1) = 0.0;
-  LAH_ENTRY(f->S, 1, 0) = 0.0;
+  SRUKF_ENTRY(f->x, 0, 0) = 1.0;
+  SRUKF_ENTRY(f->x, 1, 0) = 2.0;
+  SRUKF_ENTRY(f->S, 0, 0) = 0.5;
+  SRUKF_ENTRY(f->S, 1, 1) = 0.5;
+  SRUKF_ENTRY(f->S, 0, 1) = 0.0;
+  SRUKF_ENTRY(f->S, 1, 0) = 0.0;
 
-  lah_mat *Xsig = allocMatrixNow(2, 5);
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(2, 5);
   assert(Xsig);
 
   /* Test with small alpha (tight spread) */
   srukf_set_scale(f, 1e-3, 2.0, 0.0);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
   verify_sigma_points(f, Xsig);
 
   /* Test with alpha = 1 (standard spread) */
   srukf_set_scale(f, 1.0, 2.0, 0.0);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
   verify_sigma_points(f, Xsig);
 
   /* Test with larger alpha */
   srukf_set_scale(f, 2.0, 2.0, 0.0);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
   verify_sigma_points(f, Xsig);
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_alpha_var     OK\n");
 }
@@ -207,25 +207,25 @@ static void test_correlated_states(void) {
   srukf *f = srukf_create(2, 1);
   assert(f);
 
-  LAH_ENTRY(f->x, 0, 0) = 0.0;
-  LAH_ENTRY(f->x, 1, 0) = 0.0;
+  SRUKF_ENTRY(f->x, 0, 0) = 0.0;
+  SRUKF_ENTRY(f->x, 1, 0) = 0.0;
 
   /* Non-diagonal lower triangular S (Cholesky factor) */
-  LAH_ENTRY(f->S, 0, 0) = 1.0;
-  LAH_ENTRY(f->S, 0, 1) = 0.0;
-  LAH_ENTRY(f->S, 1, 0) = 0.5;   /* correlation */
-  LAH_ENTRY(f->S, 1, 1) = 0.866; /* sqrt(1 - 0.5^2) */
+  SRUKF_ENTRY(f->S, 0, 0) = 1.0;
+  SRUKF_ENTRY(f->S, 0, 1) = 0.0;
+  SRUKF_ENTRY(f->S, 1, 0) = 0.5;   /* correlation */
+  SRUKF_ENTRY(f->S, 1, 1) = 0.866; /* sqrt(1 - 0.5^2) */
 
   srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_mat *Xsig = allocMatrixNow(2, 5);
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(2, 5);
   assert(Xsig);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_correlated    OK\n");
 }
@@ -235,30 +235,30 @@ static void test_scale_differences(void) {
   srukf *f = srukf_create(3, 1);
   assert(f);
 
-  LAH_ENTRY(f->x, 0, 0) = 1e6;  /* large */
-  LAH_ENTRY(f->x, 1, 0) = 1.0;  /* normal */
-  LAH_ENTRY(f->x, 2, 0) = 1e-6; /* small */
+  SRUKF_ENTRY(f->x, 0, 0) = 1e6;  /* large */
+  SRUKF_ENTRY(f->x, 1, 0) = 1.0;  /* normal */
+  SRUKF_ENTRY(f->x, 2, 0) = 1e-6; /* small */
 
   /* Diagonal S with matching scales */
-  LAH_ENTRY(f->S, 0, 0) = 1e3;
-  LAH_ENTRY(f->S, 1, 1) = 0.1;
-  LAH_ENTRY(f->S, 2, 2) = 1e-9;
+  SRUKF_ENTRY(f->S, 0, 0) = 1e3;
+  SRUKF_ENTRY(f->S, 1, 1) = 0.1;
+  SRUKF_ENTRY(f->S, 2, 2) = 1e-9;
 
   srukf_set_scale(f, 1.0, 2.0, 0.0);
 
-  lah_mat *Xsig = allocMatrixNow(3, 7);
+  srukf_mat *Xsig = SRUKF_MAT_ALLOC(3, 7);
   assert(Xsig);
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         lahReturnOk);
+         SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
   /* Verify all values are finite */
-  for (lah_index i = 0; i < 3; i++)
-    for (lah_index j = 0; j < 7; j++)
-      assert(isfinite(LAH_ENTRY(Xsig, i, j)));
+  for (srukf_index i = 0; i < 3; i++)
+    for (srukf_index j = 0; j < 7; j++)
+      assert(isfinite(SRUKF_ENTRY(Xsig, i, j)));
 
-  lah_matFree(Xsig);
+  srukf_mat_free(Xsig);
   srukf_free(f);
   printf("  test_scale_diff    OK\n");
 }
@@ -270,18 +270,18 @@ static void test_errors(void) {
 
   /* NULL Xsig */
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, NULL) ==
-         lahReturnParameterError);
+         SRUKF_RETURN_PARAMETER_ERROR);
 
   /* Wrong dimensions */
-  lah_mat *Xsig_wrong = allocMatrixNow(3, 5); /* wrong rows */
+  srukf_mat *Xsig_wrong = SRUKF_MAT_ALLOC(3, 5); /* wrong rows */
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig_wrong) ==
-         lahReturnParameterError);
-  lah_matFree(Xsig_wrong);
+         SRUKF_RETURN_PARAMETER_ERROR);
+  srukf_mat_free(Xsig_wrong);
 
-  Xsig_wrong = allocMatrixNow(2, 4); /* wrong columns */
+  Xsig_wrong = SRUKF_MAT_ALLOC(2, 4); /* wrong columns */
   assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig_wrong) ==
-         lahReturnParameterError);
-  lah_matFree(Xsig_wrong);
+         SRUKF_RETURN_PARAMETER_ERROR);
+  srukf_mat_free(Xsig_wrong);
 
   srukf_free(f);
   printf("  test_errors        OK\n");

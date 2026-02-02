@@ -15,7 +15,7 @@
 
 /* Number of iterations per benchmark */
 #define WARMUP_ITERS 100
-#define BENCH_ITERS 10000
+#define BENCH_ITERS  10000
 
 /* ---------------- Timing helpers ------------------------------------ */
 static double get_time_ns(void) {
@@ -56,38 +56,38 @@ static stats_t compute_stats(const double *samples, int n) {
 
 /* ---------------- Process/measurement models ------------------------ */
 /* Simple linear process: x' = x (identity) */
-static void process_identity(const lah_mat *x, lah_mat *xp, void *user) {
+static void process_identity(const srukf_mat *x, srukf_mat *xp, void *user) {
   (void)user;
-  for (lah_index i = 0; i < x->nR; i++)
-    LAH_ENTRY(xp, i, 0) = LAH_ENTRY(x, i, 0);
+  for (srukf_index i = 0; i < x->n_rows; i++)
+    SRUKF_ENTRY(xp, i, 0) = SRUKF_ENTRY(x, i, 0);
 }
 
 /* Simple linear measurement: z = H*x where H selects first M states */
-static void meas_linear(const lah_mat *x, lah_mat *z, void *user) {
+static void meas_linear(const srukf_mat *x, srukf_mat *z, void *user) {
   (void)user;
-  for (lah_index i = 0; i < z->nR; i++)
-    LAH_ENTRY(z, i, 0) = LAH_ENTRY(x, i, 0);
+  for (srukf_index i = 0; i < z->n_rows; i++)
+    SRUKF_ENTRY(z, i, 0) = SRUKF_ENTRY(x, i, 0);
 }
 
 /* Nonlinear process: x' = x + 0.01*sin(x) */
-static void process_nonlinear(const lah_mat *x, lah_mat *xp, void *user) {
+static void process_nonlinear(const srukf_mat *x, srukf_mat *xp, void *user) {
   (void)user;
-  for (lah_index i = 0; i < x->nR; i++)
-    LAH_ENTRY(xp, i, 0) = LAH_ENTRY(x, i, 0) + 0.01 * sin(LAH_ENTRY(x, i, 0));
+  for (srukf_index i = 0; i < x->n_rows; i++)
+    SRUKF_ENTRY(xp, i, 0) = SRUKF_ENTRY(x, i, 0) + 0.01 * sin(SRUKF_ENTRY(x, i, 0));
 }
 
 /* Nonlinear measurement: z = x^2 */
-static void meas_nonlinear(const lah_mat *x, lah_mat *z, void *user) {
+static void meas_nonlinear(const srukf_mat *x, srukf_mat *z, void *user) {
   (void)user;
-  for (lah_index i = 0; i < z->nR; i++) {
-    lah_value v = LAH_ENTRY(x, i, 0);
-    LAH_ENTRY(z, i, 0) = v * v;
+  for (srukf_index i = 0; i < z->n_rows; i++) {
+    srukf_value v = SRUKF_ENTRY(x, i, 0);
+    SRUKF_ENTRY(z, i, 0) = v * v;
   }
 }
 
 /* ---------------- Benchmark routines -------------------------------- */
 static void bench_predict(int N, int M, int iters, double *samples,
-                          void (*f)(const lah_mat *, lah_mat *, void *)) {
+                          void (*f)(const srukf_mat *, srukf_mat *, void *)) {
   srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
@@ -95,18 +95,18 @@ static void bench_predict(int N, int M, int iters, double *samples,
   }
 
   /* Initialize noise matrices */
-  lah_mat *Q = allocMatrixNow(N, N);
-  lah_mat *R = allocMatrixNow(M, M);
+  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
   for (int i = 0; i < N; i++)
-    LAH_ENTRY(Q, i, i) = 0.1;
+    SRUKF_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
-    LAH_ENTRY(R, i, i) = 0.1;
+    SRUKF_ENTRY(R, i, i) = 0.1;
   srukf_set_noise(ukf, Q, R);
   srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* Initialize state */
   for (int i = 0; i < N; i++)
-    LAH_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
+    SRUKF_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
 
   /* Pre-allocate workspace */
   srukf_alloc_workspace(ukf);
@@ -123,13 +123,13 @@ static void bench_predict(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  lah_matFree(Q);
-  lah_matFree(R);
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
   srukf_free(ukf);
 }
 
 static void bench_correct(int N, int M, int iters, double *samples,
-                          void (*h)(const lah_mat *, lah_mat *, void *)) {
+                          void (*h)(const srukf_mat *, srukf_mat *, void *)) {
   srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
@@ -137,23 +137,23 @@ static void bench_correct(int N, int M, int iters, double *samples,
   }
 
   /* Initialize noise matrices */
-  lah_mat *Q = allocMatrixNow(N, N);
-  lah_mat *R = allocMatrixNow(M, M);
+  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
   for (int i = 0; i < N; i++)
-    LAH_ENTRY(Q, i, i) = 0.1;
+    SRUKF_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
-    LAH_ENTRY(R, i, i) = 0.1;
+    SRUKF_ENTRY(R, i, i) = 0.1;
   srukf_set_noise(ukf, Q, R);
   srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* Initialize state */
   for (int i = 0; i < N; i++)
-    LAH_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
+    SRUKF_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
 
   /* Measurement vector */
-  lah_mat *z = allocMatrixNow(M, 1);
+  srukf_mat *z = SRUKF_MAT_ALLOC(M, 1);
   for (int i = 0; i < M; i++)
-    LAH_ENTRY(z, i, 0) = 0.1 * (i + 1);
+    SRUKF_ENTRY(z, i, 0) = 0.1 * (i + 1);
 
   /* Pre-allocate workspace */
   srukf_alloc_workspace(ukf);
@@ -170,14 +170,14 @@ static void bench_correct(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  lah_matFree(Q);
-  lah_matFree(R);
-  lah_matFree(z);
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_mat_free(z);
   srukf_free(ukf);
 }
 
 static void bench_predict_to(int N, int M, int iters, double *samples,
-                             void (*f)(const lah_mat *, lah_mat *, void *)) {
+                             void (*f)(const srukf_mat *, srukf_mat *, void *)) {
   srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
@@ -185,21 +185,21 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
   }
 
   /* Initialize noise matrices */
-  lah_mat *Q = allocMatrixNow(N, N);
-  lah_mat *R = allocMatrixNow(M, M);
+  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
   for (int i = 0; i < N; i++)
-    LAH_ENTRY(Q, i, i) = 0.1;
+    SRUKF_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
-    LAH_ENTRY(R, i, i) = 0.1;
+    SRUKF_ENTRY(R, i, i) = 0.1;
   srukf_set_noise(ukf, Q, R);
   srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* User-managed state buffers */
-  lah_mat *x = allocMatrixNow(N, 1);
-  lah_mat *S = allocMatrixNow(N, N);
+  srukf_mat *x = SRUKF_MAT_ALLOC(N, 1);
+  srukf_mat *S = SRUKF_MAT_ALLOC(N, N);
   for (int i = 0; i < N; i++) {
-    LAH_ENTRY(x, i, 0) = 0.1 * (i + 1);
-    LAH_ENTRY(S, i, i) = 0.001;
+    SRUKF_ENTRY(x, i, 0) = 0.1 * (i + 1);
+    SRUKF_ENTRY(S, i, i) = 0.001;
   }
 
   /* Pre-allocate workspace */
@@ -217,15 +217,15 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  lah_matFree(Q);
-  lah_matFree(R);
-  lah_matFree(x);
-  lah_matFree(S);
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_mat_free(x);
+  srukf_mat_free(S);
   srukf_free(ukf);
 }
 
 static void bench_correct_to(int N, int M, int iters, double *samples,
-                             void (*h)(const lah_mat *, lah_mat *, void *)) {
+                             void (*h)(const srukf_mat *, srukf_mat *, void *)) {
   srukf *ukf = srukf_create(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
@@ -233,27 +233,27 @@ static void bench_correct_to(int N, int M, int iters, double *samples,
   }
 
   /* Initialize noise matrices */
-  lah_mat *Q = allocMatrixNow(N, N);
-  lah_mat *R = allocMatrixNow(M, M);
+  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
   for (int i = 0; i < N; i++)
-    LAH_ENTRY(Q, i, i) = 0.1;
+    SRUKF_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
-    LAH_ENTRY(R, i, i) = 0.1;
+    SRUKF_ENTRY(R, i, i) = 0.1;
   srukf_set_noise(ukf, Q, R);
   srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
 
   /* User-managed state buffers */
-  lah_mat *x = allocMatrixNow(N, 1);
-  lah_mat *S = allocMatrixNow(N, N);
+  srukf_mat *x = SRUKF_MAT_ALLOC(N, 1);
+  srukf_mat *S = SRUKF_MAT_ALLOC(N, N);
   for (int i = 0; i < N; i++) {
-    LAH_ENTRY(x, i, 0) = 0.1 * (i + 1);
-    LAH_ENTRY(S, i, i) = 0.001;
+    SRUKF_ENTRY(x, i, 0) = 0.1 * (i + 1);
+    SRUKF_ENTRY(S, i, i) = 0.001;
   }
 
   /* Measurement vector */
-  lah_mat *z = allocMatrixNow(M, 1);
+  srukf_mat *z = SRUKF_MAT_ALLOC(M, 1);
   for (int i = 0; i < M; i++)
-    LAH_ENTRY(z, i, 0) = 0.1 * (i + 1);
+    SRUKF_ENTRY(z, i, 0) = 0.1 * (i + 1);
 
   /* Pre-allocate workspace */
   srukf_alloc_workspace(ukf);
@@ -270,11 +270,11 @@ static void bench_correct_to(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  lah_matFree(Q);
-  lah_matFree(R);
-  lah_matFree(x);
-  lah_matFree(S);
-  lah_matFree(z);
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_mat_free(x);
+  srukf_mat_free(S);
+  srukf_mat_free(z);
   srukf_free(ukf);
 }
 
@@ -295,10 +295,10 @@ int main(void) {
   int configs[][2] = {{3, 2}, {6, 3}, {10, 5}, {15, 8}, {20, 10}};
   int n_configs = sizeof(configs) / sizeof(configs[0]);
 
-  printf("%-8s %-12s %-12s %-12s %-12s %-12s\n", "Dim", "Operation", "Mean (us)",
-         "Stddev (us)", "Min (us)", "Max (us)");
-  printf("%-8s %-12s %-12s %-12s %-12s %-12s\n", "---", "---------", "---------",
-         "-----------", "--------", "--------");
+  printf("%-8s %-12s %-12s %-12s %-12s %-12s\n", "Dim", "Operation",
+         "Mean (us)", "Stddev (us)", "Min (us)", "Max (us)");
+  printf("%-8s %-12s %-12s %-12s %-12s %-12s\n", "---", "---------",
+         "---------", "-----------", "--------", "--------");
 
   for (int c = 0; c < n_configs; c++) {
     int N = configs[c][0];

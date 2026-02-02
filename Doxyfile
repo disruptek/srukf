@@ -1,0 +1,90 @@
+# Doxyfile for SR-UKF Library
+# Minimal configuration for clean, educational documentation
+
+#---------------------------------------------------------------------------
+# Project settings
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "SR-UKF"
+PROJECT_BRIEF          = "Square-Root Unscented Kalman Filter Library"
+PROJECT_NUMBER         = "1.0"
+OUTPUT_DIRECTORY       = docs
+
+#---------------------------------------------------------------------------
+# Input settings
+#---------------------------------------------------------------------------
+INPUT                  = srukf.h srukf.c
+FILE_PATTERNS          = *.h *.c
+RECURSIVE              = NO
+
+#---------------------------------------------------------------------------
+# Output settings
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+HTML_OUTPUT            = html
+
+# Modern, clean HTML output
+HTML_COLORSTYLE        = LIGHT
+HTML_DYNAMIC_SECTIONS  = YES
+DISABLE_INDEX          = NO
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+
+#---------------------------------------------------------------------------
+# Documentation extraction
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = NO
+
+# We want to document internal (static) functions for educational purposes
+INTERNAL_DOCS          = YES
+
+# Extract documentation from .c files too
+EXTRACT_ANON_NSPACES   = NO
+
+#---------------------------------------------------------------------------
+# Source browsing (helpful for teaching)
+#---------------------------------------------------------------------------
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+#---------------------------------------------------------------------------
+# Preprocessing
+#---------------------------------------------------------------------------
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+PREDEFINED             = HAVE_LAPACK
+
+#---------------------------------------------------------------------------
+# Diagram generation (optional - requires graphviz)
+#---------------------------------------------------------------------------
+HAVE_DOT               = NO
+# Set to YES if graphviz is available for call graphs
+
+#---------------------------------------------------------------------------
+# Warnings and input validation
+#---------------------------------------------------------------------------
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+
+#---------------------------------------------------------------------------
+# Markdown and formatting
+#---------------------------------------------------------------------------
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+USE_MATHJAX            = YES
+MATHJAX_VERSION        = MathJax_3
+
+# MathJax for rendering equations (important for Kalman filter math)
+MATHJAX_RELPATH        = https://cdn.jsdelivr.net/npm/mathjax@3/es5/
+MATHJAX_EXTENSIONS     =

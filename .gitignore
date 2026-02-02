@@ -1,3 +1,25 @@
 bin
 *.so
 tests-output.txt
+
+# Coverage artifacts
+*.gcno
+*.gcda
+coverage.info
+coverage-report/
+
+# Generated documentation
+docs/
+
+# Editor/IDE
+*.swp
+*~
+.vscode/
+.idea/
+
+# Build artifacts in vendor
+vendor/lah/*.o
+
+# lsp
+compile_commands.json
+.cache
