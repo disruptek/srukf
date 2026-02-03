@@ -37,3 +37,9 @@ tmp/doxygen-*
 # Generated Doxygen template files (we only use header.html)
 docs/footer.html
 customdoxygen.css
+
+# Example binaries and intermediate files
+examples/01_pendulum/pendulum
+examples/02_gps_imu_1d/gps_imu
+examples/03_stability_test/stability
+examples/common/*.o
