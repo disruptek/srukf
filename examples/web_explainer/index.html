@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unscented Kalman Filter - Interactive Explainer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    h1 {
+      font-size: 3em;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .subtitle {
+      font-size: 1.2em;
+      opacity: 0.9;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .card h2 {
+      margin-bottom: 20px;
+      font-size: 1.8em;
+    }
+
+    canvas {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      display: block;
+      margin: 0 auto;
+      cursor: crosshair;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: center;
+    }
+
+    button {
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1em;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    select, input[type="range"] {
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      color: white;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+
+    select option {
+      background: #667eea;
+      color: white;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      min-width: 150px;
+      cursor: grab;
+    }
+
+    input[type="range"]:active {
+      cursor: grabbing;
+    }
+
+    label {
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .value-display {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      min-width: 50px;
+      text-align: center;
+    }
+
+    .explanation {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      line-height: 1.6;
+    }
+
+    .explanation h3 {
+      margin-bottom: 10px;
+      color: #ffd700;
+    }
+
+    .explanation ul {
+      margin-left: 20px;
+      margin-top: 10px;
+    }
+
+    .explanation li {
+      margin-bottom: 8px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .stat-box {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 15px;
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.9em;
+      opacity: 0.8;
+      margin-bottom: 5px;
+    }
+
+    .stat-value {
+      font-size: 1.5em;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .legend-color {
+      width: 30px;
+      height: 20px;
+      border-radius: 4px;
+      border: 2px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .info-section {
+      margin-top: 40px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .info-card {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 15px;
+      border-left: 4px solid #ffd700;
+    }
+
+    .info-card h3 {
+      color: #ffd700;
+      margin-bottom: 10px;
+    }
+
+    code {
+      background: rgba(0, 0, 0, 0.4);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .animating {
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 60px;
+      padding: 20px;
+      opacity: 0.8;
+    }
+
+    footer a {
+      color: #ffd700;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎯 Unscented Kalman Filter</h1>
+      <p class="subtitle">Interactive Visualization of Sigma Points and Nonlinear Transformations</p>
+    </header>
+
+    <div class="grid">
+      <!-- Sigma Points Visualization -->
+      <div class="card">
+        <h2>Sigma Points Transform</h2>
+        <canvas id="sigmaCanvas" width="600" height="500"></canvas>
+        
+        <div class="controls">
+          <label>
+            Nonlinear Function:
+            <select id="functionSelect">
+              <option value="identity">Linear (x → x)</option>
+              <option value="square">Quadratic (x → x²)</option>
+              <option value="sin" selected>Sine (x → sin(x))</option>
+              <option value="exp">Exponential (x → exp(x/5))</option>
+              <option value="tanh">Hyperbolic Tan (x → tanh(x))</option>
+            </select>
+          </label>
+          <button id="resetBtn">Reset</button>
+        </div>
+
+        <div class="controls">
+          <label>
+            Uncertainty (σ):
+            <input type="range" id="uncertaintySlider" min="0.1" max="3" step="0.1" value="1">
+            <span class="value-display" id="uncertaintyValue">1.0</span>
+          </label>
+        </div>
+
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-color" style="background: #4169E1;"></div>
+            <span>Input State</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: #32CD32;"></div>
+            <span>Sigma Points</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: #FF6347;"></div>
+            <span>Transformed State</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: #FFD700;"></div>
+            <span>True Nonlinear Transform</span>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat-box">
+            <div class="stat-label">Input Mean</div>
+            <div class="stat-value" id="inputMean">0.00</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Output Mean</div>
+            <div class="stat-value" id="outputMean">0.00</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Input Variance</div>
+            <div class="stat-value" id="inputVar">1.00</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Output Variance</div>
+            <div class="stat-value" id="outputVar">1.00</div>
+          </div>
+        </div>
+
+        <div class="explanation">
+          <h3>How It Works</h3>
+          <p>
+            The Unscented Kalman Filter uses <strong>sigma points</strong> to capture uncertainty 
+            through nonlinear transformations. Instead of linearizing (like the Extended Kalman Filter), 
+            the UKF samples carefully chosen points around the mean.
+          </p>
+          <ul>
+            <li><strong>Blue curve:</strong> Input state distribution (Gaussian)</li>
+            <li><strong>Green dots:</strong> Sigma points (2n+1 = 3 for 1D)</li>
+            <li><strong>Red curve:</strong> Output distribution reconstructed from transformed sigma points</li>
+            <li><strong>Yellow curve:</strong> True transformation (for comparison)</li>
+          </ul>
+          <p>
+            <strong>Try this:</strong> Drag the slider to change uncertainty, or select different 
+            functions to see how the UKF handles various nonlinearities. Notice how the red curve 
+            closely matches the yellow true transformation!
+          </p>
+        </div>
+      </div>
+
+      <!-- Algorithm Steps -->
+      <div class="card">
+        <h2>UKF Algorithm Steps</h2>
+        <canvas id="stepsCanvas" width="600" height="500"></canvas>
+        
+        <div class="controls">
+          <button id="stepBtn">Next Step</button>
+          <button id="playBtn">▶ Animate</button>
+          <button id="resetStepsBtn">Reset</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat-box">
+            <div class="stat-label">Current Step</div>
+            <div class="stat-value" id="currentStep">1</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">State Estimate</div>
+            <div class="stat-value" id="stateEstimate">0.00</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Uncertainty</div>
+            <div class="stat-value" id="stateUncertainty">1.00</div>
+          </div>
+        </div>
+
+        <div class="explanation" id="stepExplanation">
+          <h3>Step 1: Initialize</h3>
+          <p>
+            Starting with an initial state estimate and covariance. 
+            The UKF will predict the next state and then correct it based on measurements.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Information Section -->
+    <div class="info-section">
+      <div class="card">
+        <h2>Why Unscented Kalman Filter?</h2>
+        <div class="info-grid">
+          <div class="info-card">
+            <h3>🎯 Accurate for Nonlinear Systems</h3>
+            <p>
+              Unlike the Extended Kalman Filter (EKF) which linearizes using Jacobians, 
+              the UKF directly propagates uncertainty through nonlinear functions using 
+              sigma points. This gives better accuracy for highly nonlinear systems.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <h3>🔢 No Jacobians Needed</h3>
+            <p>
+              The UKF doesn't require derivatives! You just provide the nonlinear function 
+              <code>f(x)</code>, and the filter handles the rest. This makes implementation 
+              easier and works with non-differentiable functions.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <h3>📊 Captures Higher-Order Moments</h3>
+            <p>
+              Sigma points are chosen to match the first two moments (mean and covariance) 
+              of the distribution. The UKF captures effects up to 3rd order (Taylor series), 
+              while EKF only captures 1st order.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <h3>🛡️ Square-Root Formulation</h3>
+            <p>
+              The SR-UKF works with the Cholesky factor <code>S</code> where <code>P = SS'</code>. 
+              This guarantees positive definiteness and provides better numerical stability 
+              for long-running filters.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <h3>🎲 Sigma Point Selection</h3>
+            <p>
+              For n-dimensional state, we use <code>2n+1</code> sigma points. 
+              They're placed at <code>x̄ ± √((n+λ)P)</code> along each principal axis, 
+              plus one at the mean. Parameter <code>λ</code> controls the spread.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <h3>⚡ Computational Cost</h3>
+            <p>
+              UKF requires <code>2n+1</code> function evaluations per iteration 
+              (vs. 1 for EKF plus Jacobian computation). For small to medium n (&lt;20), 
+              this is very reasonable on modern hardware.
+            </p>
+          </div>
+        </div>
+
+        <div class="explanation" style="margin-top: 30px;">
+          <h3>Mathematical Foundation</h3>
+          <p><strong>1. Sigma Point Generation:</strong></p>
+          <p style="font-family: 'Courier New', monospace; margin: 10px 0;">
+            χ₀ = x̄<br>
+            χᵢ = x̄ + (√((n+λ)P))ᵢ   for i = 1,...,n<br>
+            χᵢ = x̄ - (√((n+λ)P))ᵢ₋ₙ for i = n+1,...,2n
+          </p>
+
+          <p><strong>2. Prediction (Process Model):</strong></p>
+          <p style="font-family: 'Courier New', monospace; margin: 10px 0;">
+            χᵢ⁻ = f(χᵢ) for all i<br>
+            x̄⁻ = Σ Wᵢᵐ χᵢ⁻<br>
+            P⁻ = Σ Wᵢᶜ (χᵢ⁻ - x̄⁻)(χᵢ⁻ - x̄⁻)' + Q
+          </p>
+
+          <p><strong>3. Update (Measurement Model):</strong></p>
+          <p style="font-family: 'Courier New', monospace; margin: 10px 0;">
+            Υᵢ = h(χᵢ⁻) for all i<br>
+            ŷ = Σ Wᵢᵐ Υᵢ<br>
+            K = Pₓᵧ (Pᵧᵧ + R)⁻¹<br>
+            x̄⁺ = x̄⁻ + K(y - ŷ)
+          </p>
+
+          <p style="margin-top: 15px;">
+            Where <code>Wᵢᵐ</code> and <code>Wᵢᶜ</code> are weights chosen to satisfy moment-matching conditions.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>
+        Part of the <a href="../../">SR-UKF</a> library examples • 
+        <a href="https://github.com/disruptek/srukf">View on GitHub</a>
+      </p>
+      <p style="margin-top: 10px; font-size: 0.9em;">
+        Click and drag on the visualization above to explore how sigma points transform through nonlinear functions.
+      </p>
+    </footer>
+  </div>
+
+  <script src="ukf-explainer.js"></script>
+</body>
+</html>

@@ -24,7 +24,7 @@ Track a nonlinear pendulum with noisy angle measurements.
 
 ---
 
-### 2. **GPS + IMU Fusion** (`02_gps_imu_1d/`) *(Coming Soon)*
+### 2. **GPS + IMU Fusion** (`02_gps_imu_1d/`)
 
 Fuse continuous IMU measurements with intermittent GPS updates in 1D motion.
 
@@ -33,26 +33,88 @@ Fuse continuous IMU measurements with intermittent GPS updates in 1D motion.
 **Dimensions**: 3D state (position, velocity, acceleration), 2 measurement types
 
 **Why this example?**
-- Real-world application (matches README motivation)
-- Shows uncertainty growing/shrinking
-- Demonstrates handling measurement dropouts
-- Foundation for full 3D navigation
+- Real-world application (autonomous navigation)
+- Shows uncertainty growing/shrinking during GPS dropouts
+- Demonstrates handling measurement outages gracefully
+- Multi-rate sensor fusion (GPS 1 Hz, IMU 100 Hz)
+- Foundation for full 3D navigation systems
+
+**Key Features:**
+- GPS dropout simulation
+- Three visualization plots (position, uncertainty, availability)
+- Demonstrates filter "bridging" measurement gaps
+- Shows complementary sensor characteristics
+
+![GPS+IMU Position Tracking](02_gps_imu_1d/gps_imu_position.svg)
+
+[→ Run this example](02_gps_imu_1d/)
 
 ---
 
-### 3. **Long-Duration Stability** (`03_stability_test/`) *(Coming Soon)*
+### 3. **Long-Duration Stability** (`03_stability_test/`)
 
-Demonstrate SR-UKF's numerical stability over 100,000+ timesteps.
+Demonstrate SR-UKF's numerical stability over extended operation (thousands of iterations).
 
 **Difficulty**: Intermediate  
 **Concepts**: Numerical stability, covariance conditioning, long-term filtering  
-**Dimensions**: Configurable
+**Dimensions**: 4D state (2D position + velocity)
 
 **Why this example?**
-- Proves the core SR-UKF value proposition
-- Shows robustness to numerical issues
+- Proves the core SR-UKF value proposition (stability)
+- Shows robustness to numerical issues over time
 - Educational for understanding square-root formulation benefits
-- Comparison point when other filters are implemented
+- Four challenging test scenarios
+- Performance metrics (1M+ steps/second)
+
+**Test Scenarios:**
+1. **Baseline** - Standard conditions (1000s duration)
+2. **High Dynamics** - Aggressive maneuvering
+3. **Poor Observability** - Infrequent measurements
+4. **Extreme Noise** - Very noisy sensors
+
+**Health Metrics:**
+- Covariance trace, determinant, condition number
+- NEES (Normalized Estimation Error Squared) consistency test
+- NaN/Inf detection
+- Positive definiteness verification
+
+![Stability Test Results](03_stability_test/stability_error.svg)
+
+[→ Run this example](03_stability_test/)
+
+---
+
+### 4. **Interactive Web Explainer** (`web_explainer/`)
+
+Browser-based interactive visualization of UKF concepts. No compilation needed!
+
+**Difficulty**: Beginner (for viewing), Advanced (for understanding internals)  
+**Concepts**: Sigma points, unscented transform, nonlinear transformations  
+**Format**: HTML/CSS/JavaScript (runs in browser)
+
+**Why this example?**
+- Visual understanding of abstract concepts
+- Interactive - drag and experiment!
+- No build tools or dependencies required
+- Perfect for teaching and presentations
+- Shows sigma point magic in real-time
+
+**Features:**
+- **Sigma Points Visualization**: See how 3 points capture uncertainty through sin(x), x², exp(x)
+- **Algorithm Animation**: Step through predict-measure-update cycle
+- **Multiple Nonlinear Functions**: Compare different transformations
+- **Live Statistics**: Input/output mean and variance
+- **Mathematical Foundations**: Embedded equations and explanations
+
+**Just open in browser:**
+```bash
+cd web_explainer
+firefox index.html  # or chrome, safari, etc.
+```
+
+No server, no build process, no dependencies. Pure HTML5!
+
+[→ Open the explainer](web_explainer/)
 
 ---
 
@@ -251,22 +313,49 @@ Make sure LAPACK/BLAS are installed:
 sudo apt install libopenblas-dev liblapacke-dev
 ```
 
+## Summary Table
+
+| Example | Difficulty | State Dim | Key Concept | Build Required | Estimated Time |
+|---------|------------|-----------|-------------|----------------|----------------|
+| **Web Explainer** | Beginner | 1D | Sigma points visualization | No | 10 min |
+| **Pendulum** | Beginner | 2D | Nonlinear dynamics | Yes | 20 min |
+| **GPS+IMU** | Intermediate | 3D | Sensor fusion | Yes | 30 min |
+| **Stability Test** | Intermediate | 4D | Numerical robustness | Yes | 45 min |
+
+**Total learning time:** ~2 hours to work through all examples
+
 ## Next Steps
 
-1. **Start with pendulum example** - easiest to understand
-2. **Read the source code** - it's heavily documented for learning
-3. **Experiment with parameters** - break things and see what happens!
-4. **Try implementing your own example** - best way to learn
+1. **Start with web explainer** - no compilation, instant gratification
+2. **Build and run pendulum** - easiest C code example
+3. **Read the source code** - it's heavily documented for learning
+4. **Experiment with parameters** - break things and see what happens!
+5. **Try GPS+IMU and stability** - advanced real-world scenarios
+6. **Implement your own example** - best way to solidify understanding
 
-## Web-Based Interactive Explainer
+## Learning Path
 
-Coming soon: A web application with:
-- Interactive parameter tuning
-- Live sigma point visualization
-- Algorithm step-through
-- Side-by-side filter comparison
+We recommend exploring the examples in this order:
 
-Will be hosted at: `https://disruptek.github.io/srukf/explainer/`
+1. **Web Explainer** (`web_explainer/`) - Start here to understand UKF concepts visually
+   - No compilation needed
+   - Interactive and intuitive
+   - Builds mental model of sigma points
+
+2. **Pendulum** (`01_pendulum/`) - First code example
+   - Simple physics everyone understands
+   - Clear nonlinearity (sin θ)
+   - Learn filter setup and tuning
+
+3. **GPS+IMU** (`02_gps_imu_1d/`) - Real-world application
+   - Multi-sensor fusion
+   - Handling measurement dropouts
+   - Production-relevant patterns
+
+4. **Stability Test** (`03_stability_test/`) - Advanced validation
+   - Numerical robustness
+   - Long-duration operation
+   - Performance characterization
 
 ## Questions?
 
