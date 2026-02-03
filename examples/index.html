@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SR-UKF Examples</title>
+    <meta name="description" content="Interactive examples and tutorials for the Square-Root Unscented Kalman Filter">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --border-color: #dee2e6;
+            --accent-color: #5c6ac4;
+            --card-hover: #ffffff;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #1a1a1a;
+                --bg-secondary: #2d2d2d;
+                --text-primary: #e9ecef;
+                --text-secondary: #adb5bd;
+                --border-color: #495057;
+                --accent-color: #7c8adb;
+                --card-hover: #333333;
+                --shadow: rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .intro {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 1rem auto 0;
+        }
+
+        .cards {
+            display: grid;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px var(--shadow);
+            background: var(--card-hover);
+            border-color: var(--accent-color);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            font-size: 2.5rem;
+        }
+
+        .card-title-group h2 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: var(--text-primary);
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-difficulty {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .badge-time {
+            background: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .card-description {
+            color: var(--text-secondary);
+            margin: 1rem 0;
+            line-height: 1.6;
+        }
+
+        .features {
+            margin: 1rem 0;
+        }
+
+        .features ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .features li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: var(--text-secondary);
+        }
+
+        .features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--accent-color);
+            border: 2px solid var(--accent-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .learning-path {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-color);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .learning-path h2 {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .learning-path ol {
+            padding-left: 2rem;
+        }
+
+        .learning-path li {
+            margin: 1rem 0;
+            color: var(--text-secondary);
+        }
+
+        .learning-path strong {
+            color: var(--text-primary);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .card-actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 SR-UKF Examples</h1>
+            <p class="subtitle">Interactive tutorials and visualizations</p>
+            <p class="intro">
+                Learn the Square-Root Unscented Kalman Filter through four comprehensive examples, 
+                from interactive web visualizations to production-ready C implementations.
+            </p>
+        </header>
+
+        <main>
+            <div class="learning-path">
+                <h2>📚 Recommended Learning Path</h2>
+                <ol>
+                    <li><strong>Web Explainer</strong> - Start here for visual understanding (10 min)</li>
+                    <li><strong>Pendulum</strong> - Your first code example (20 min)</li>
+                    <li><strong>GPS+IMU</strong> - Real-world sensor fusion (30 min)</li>
+                    <li><strong>Stability Test</strong> - Advanced validation (45 min)</li>
+                </ol>
+                <p style="margin-top: 1rem; color: var(--text-secondary);">
+                    <strong>Total learning time:</strong> ~2 hours to master all examples
+                </p>
+            </div>
+
+            <div class="cards">
+                <!-- Web Explainer -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-icon">🎯</span>
+                        <div class="card-title-group">
+                            <h2>Interactive Web Explainer</h2>
+                            <div class="card-meta">
+                                <span class="badge badge-difficulty">Beginner</span>
+                                <span class="badge badge-time">10 minutes</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description">
+                        Browser-based interactive visualization of UKF concepts. No compilation needed!
+                        Drag and interact with sigma points, watch uncertainty transform through nonlinear functions.
+                    </p>
+                    <div class="features">
+                        <ul>
+                            <li>Drag to change state, see sigma points update in real-time</li>
+                            <li>Multiple nonlinear functions (sin, x², exp, tanh)</li>
+                            <li>Animated predict-measure-update cycle</li>
+                            <li>Mathematical foundations explained visually</li>
+                        </ul>
+                    </div>
+                    <div class="card-actions">
+                        <a href="web_explainer/index.html" class="btn btn-primary">Launch Explainer ✨</a>
+                        <a href="https://github.com/disruptek/srukf/tree/main/examples/web_explainer" class="btn btn-secondary">View Source</a>
+                    </div>
+                </div>
+
+                <!-- Pendulum -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-icon">🎪</span>
+                        <div class="card-title-group">
+                            <h2>1. Pendulum Tracking</h2>
+                            <div class="card-meta">
+                                <span class="badge badge-difficulty">Beginner</span>
+                                <span class="badge badge-time">20 minutes</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description">
+                        Track a nonlinear pendulum with noisy angle measurements. Perfect introduction to UKF concepts
+                        with clear sin(θ) nonlinearity and beautiful phase-space visualization.
+                    </p>
+                    <div class="features">
+                        <ul>
+                            <li>2D state: angle and angular velocity</li>
+                            <li>RK4 integration for accurate physics</li>
+                            <li>Heavily documented C source code (650+ lines)</li>
+                            <li>SVG visualization with dark mode</li>
+                        </ul>
+                    </div>
+                    <div class="card-actions">
+                        <a href="https://github.com/disruptek/srukf/tree/main/examples/01_pendulum" class="btn btn-primary">View Example</a>
+                        <a href="01_pendulum/pendulum.svg" class="btn btn-secondary">See Results</a>
+                    </div>
+                </div>
+
+                <!-- GPS+IMU -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-icon">🛰️</span>
+                        <div class="card-title-group">
+                            <h2>2. GPS + IMU Sensor Fusion</h2>
+                            <div class="card-meta">
+                                <span class="badge badge-difficulty">Intermediate</span>
+                                <span class="badge badge-time">30 minutes</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description">
+                        Fuse intermittent GPS (1 Hz) with continuous IMU (100 Hz) in 1D motion. 
+                        Real-world autonomous navigation patterns with measurement dropout handling.
+                    </p>
+                    <div class="features">
+                        <ul>
+                            <li>3D state: position, velocity, acceleration</li>
+                            <li>Multi-rate sensor fusion</li>
+                            <li>GPS dropout simulation (10-15 second gaps)</li>
+                            <li>Three visualizations: position, uncertainty, availability</li>
+                        </ul>
+                    </div>
+                    <div class="card-actions">
+                        <a href="https://github.com/disruptek/srukf/tree/main/examples/02_gps_imu_1d" class="btn btn-primary">View Example</a>
+                        <a href="02_gps_imu_1d/gps_imu_position.svg" class="btn btn-secondary">See Results</a>
+                    </div>
+                </div>
+
+                <!-- Stability Test -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-icon">🔬</span>
+                        <div class="card-title-group">
+                            <h2>3. Long-Duration Stability Test</h2>
+                            <div class="card-meta">
+                                <span class="badge badge-difficulty">Intermediate</span>
+                                <span class="badge badge-time">45 minutes</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description">
+                        Stress-test SR-UKF's numerical robustness over thousands of iterations. 
+                        Four challenging scenarios with comprehensive health metrics and performance validation.
+                    </p>
+                    <div class="features">
+                        <ul>
+                            <li>4D state: 2D position + velocity</li>
+                            <li>NEES consistency testing</li>
+                            <li>Covariance conditioning monitoring</li>
+                            <li>Performance: 1M+ steps/second</li>
+                        </ul>
+                    </div>
+                    <div class="card-actions">
+                        <a href="https://github.com/disruptek/srukf/tree/main/examples/03_stability_test" class="btn btn-primary">View Example</a>
+                        <a href="03_stability_test/stability_error.svg" class="btn btn-secondary">See Results</a>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>
+                <a href="https://github.com/disruptek/srukf">SR-UKF on GitHub</a>
+                &nbsp;·&nbsp;
+                <a href="../docs/">Documentation</a>
+                &nbsp;·&nbsp;
+                MIT License
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

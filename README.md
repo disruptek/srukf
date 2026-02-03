@@ -111,6 +111,109 @@ On Debian/Ubuntu:
 
         CFLAGS=-DSRUKF_SINGLE make lib
 
+## Examples
+
+**Learn by doing!** The `examples/` directory contains four comprehensive examples with visualizations and detailed documentation:
+
+### 🎯 **Interactive Web Explainer** - Start Here!
+
+Open in your browser (no compilation needed):
+```bash
+cd examples/web_explainer
+firefox index.html
+```
+
+**Features:**
+- Drag and interact with sigma points
+- Watch uncertainty transform through sin(x), x², exp(x)
+- Animate the predict-measure-update cycle
+- Mathematical foundations explained visually
+
+Perfect for understanding UKF concepts before diving into code.
+
+[→ View the explainer](examples/web_explainer/)
+
+---
+
+### 🎪 **1. Pendulum Tracking** - Your First Example
+
+Track a nonlinear pendulum with noisy angle measurements:
+
+```bash
+cd examples/01_pendulum
+make
+./pendulum --open
+```
+
+**What you'll learn:**
+- Setting up a UKF for a nonlinear system
+- Handling sin(θ) dynamics with RK4 integration
+- Tuning process and measurement noise
+- Generating professional visualizations
+
+**Difficulty:** Beginner | **Time:** 20 minutes
+
+[→ Pendulum example](examples/01_pendulum/)
+
+---
+
+### 🛰️ **2. GPS + IMU Sensor Fusion**
+
+Fuse intermittent GPS with continuous IMU in 1D motion:
+
+```bash
+cd examples/02_gps_imu_1d
+make
+./gps_imu --open
+```
+
+**What you'll learn:**
+- Multi-sensor fusion (GPS 1 Hz + IMU 100 Hz)
+- Handling measurement dropouts gracefully
+- Watching uncertainty grow and shrink
+- Real-world autonomous navigation patterns
+
+**Difficulty:** Intermediate | **Time:** 30 minutes
+
+[→ GPS+IMU example](examples/02_gps_imu_1d/)
+
+---
+
+### 🔬 **3. Long-Duration Stability Test**
+
+Stress-test SR-UKF's numerical robustness:
+
+```bash
+cd examples/03_stability_test
+make
+./stability --scenario=baseline --verbose
+```
+
+**What you'll learn:**
+- Why square-root formulation matters
+- Monitoring filter health (NEES, condition numbers)
+- Four challenging test scenarios
+- Performance characteristics (1M+ steps/second)
+
+**Difficulty:** Intermediate | **Time:** 45 minutes
+
+[→ Stability test example](examples/03_stability_test/)
+
+---
+
+**All examples include:**
+- ✅ Heavily documented source code
+- ✅ Pre-generated visualizations (SVG)
+- ✅ Multiple output formats (SVG, CSV, JSON)
+- ✅ Detailed READMEs with physics explanations
+- ✅ Build instructions and troubleshooting
+
+**Total learning time:** ~2 hours to master all examples
+
+[→ See all examples](examples/)
+
+---
+
 ## Usage
 
 ### Basic Example
@@ -369,6 +472,10 @@ The docs include:
 - Detailed algorithm walkthroughs for predict and correct steps
 - Tuning parameter guide (α, β, κ)
 - Complete API reference with examples
+
+**Also check out:**
+- **[Interactive Examples](https://disruptek.github.io/srukf/examples/)** - Web explainer + 3 runnable C examples
+- **[Example Source Code](examples/)** - Four complete examples with visualizations
 
 Generate locally with `make docs` (requires [Doxygen](https://www.doxygen.nl/)).
 
