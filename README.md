@@ -153,6 +153,8 @@ make
 
 **Difficulty:** Beginner | **Time:** 20 minutes
 
+![Pendulum Tracking](examples/01_pendulum/pendulum.svg)
+
 [→ Pendulum example](examples/01_pendulum/)
 
 ---
@@ -175,6 +177,8 @@ make
 
 **Difficulty:** Intermediate | **Time:** 30 minutes
 
+![GPS+IMU Fusion](examples/02_gps_imu_1d/gps_imu_position.svg)
+
 [→ GPS+IMU example](examples/02_gps_imu_1d/)
 
 ---
@@ -196,6 +200,8 @@ make
 - Performance characteristics (1M+ steps/second)
 
 **Difficulty:** Intermediate | **Time:** 45 minutes
+
+![Stability Test](examples/03_stability_test/stability_nees.svg)
 
 [→ Stability test example](examples/03_stability_test/)
 

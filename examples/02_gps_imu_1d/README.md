@@ -96,15 +96,21 @@ Three visualization files are generated:
 - IMU-only estimates (orange dashed, when available)
 - SR-UKF fused estimate (blue line)
 
+![GPS+IMU Position Tracking](gps_imu_position.svg)
+
 **2. `gps_imu_uncertainty.svg`** - Estimation uncertainty (standard deviation):
 - Position uncertainty (blue line)
 - Velocity uncertainty (orange line)
 - Acceleration uncertainty (green line)
 - GPS dropout period (shaded region)
 
+![Uncertainty Evolution](gps_imu_uncertainty.svg)
+
 **3. `gps_imu_availability.svg`** - Sensor availability timeline:
 - GPS availability (binary: 1=available, 0=dropout)
 - IMU availability (always 1 in this example)
+
+![Sensor Availability](gps_imu_availability.svg)
 
 ### CSV
 

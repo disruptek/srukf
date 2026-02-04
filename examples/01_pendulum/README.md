@@ -81,6 +81,8 @@ Generate all output formats:
 
 Dark mode is enabled by default for better readability.
 
+![Pendulum Tracking Results](pendulum.svg)
+
 ### CSV
 
 `pendulum.csv` - Tab-delimited data with columns:

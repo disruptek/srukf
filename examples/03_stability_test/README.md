@@ -108,6 +108,8 @@ Ultra-long stress test (10,000 seconds ≈ 2.8 hours simulated):
 - Shows whether estimation error remains bounded
 - Ideally: error stays within a band (no divergence)
 
+![Position Error Over Time](stability_error.svg)
+
 **2. `stability_nees.svg`** - NEES consistency test:
 - **NEES** (Normalized Estimation Error Squared) = error' * P⁻¹ * error
 - Expected value ≈ 4.0 for 4D state (chi-squared distribution)
@@ -115,10 +117,14 @@ Ultra-long stress test (10,000 seconds ≈ 2.8 hours simulated):
 - Too high: filter underconfident (P too large)
 - Consistent filter: NEES fluctuates around 4.0
 
+![NEES Consistency Test](stability_nees.svg)
+
 **3. `stability_trace.svg`** - Covariance trace evolution:
 - Trace(P) = total uncertainty
 - Should stabilize (not grow unbounded or collapse to zero)
 - Reflects filter's confidence in its estimates
+
+![Covariance Trace Evolution](stability_trace.svg)
 
 ### CSV
 
