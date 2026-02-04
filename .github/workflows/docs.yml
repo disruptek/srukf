@@ -40,6 +40,14 @@ jobs:
       - name: Generate documentation
         run: make docs
 
+      - name: Copy examples to docs
+        run: |
+          mkdir -p docs/examples
+          cp -r examples/* docs/examples/
+          # Remove build artifacts but keep source and SVGs
+          find docs/examples -name "*.o" -delete
+          find docs/examples -type f -executable ! -name "*.svg" ! -name "*.html" ! -name "*.js" -delete 2>/dev/null || true
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
