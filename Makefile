@@ -6,9 +6,9 @@ BIN_DIR     := $(SR_DIR)/bin
 # Installation prefix
 PREFIX      ?= /usr/local
 
-# Flags
-CFLAGS      := -Wall -Wextra -Wpedantic -O2 -fPIC -I$(SR_DIR) -DHAVE_LAPACK
-LDFLAGS     := -lm -llapacke -lblas -lopenblas
+# Flags (use ?= to allow override from command line or environment)
+CFLAGS      ?= -Wall -Wextra -Wpedantic -O2 -fPIC -I$(SR_DIR) -DHAVE_LAPACK
+LDFLAGS     ?= -lm -llapacke -lblas -lopenblas
 
 LIB_SRCS    := srukf.c
 LIB_HDRS    := srukf.h
