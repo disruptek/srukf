@@ -27,6 +27,54 @@ jobs:
       - name: Run benchmarks
         run: make bench
 
+  # Test examples
+  examples:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev gnuplot
+
+      - name: Build library
+        run: make lib
+
+      - name: Build all examples
+        run: |
+          cd examples/01_pendulum && make
+          cd ../02_gps_imu_1d && make
+          cd ../03_stability_test && make
+
+      - name: Run pendulum example
+        run: |
+          cd examples/01_pendulum
+          ./pendulum --duration=1 --format=csv
+          # Verify output exists
+          test -f pendulum.csv
+          # Verify CSV has data (more than just header)
+          [ $(wc -l < pendulum.csv) -gt 1 ]
+
+      - name: Run GPS+IMU example
+        run: |
+          cd examples/02_gps_imu_1d
+          ./gps_imu --duration=5 --format=csv
+          # Verify outputs exist
+          test -f gps_imu_truth.csv
+          test -f gps_imu_estimate.csv
+
+      - name: Run stability test
+        run: |
+          cd examples/03_stability_test
+          ./stability --duration=10 --format=csv
+          # Verify output exists
+          test -f stability_results.csv
+          # Check for numerical health (should have 0 failures for baseline)
+          # This is a basic smoke test
+          [ $(wc -l < stability_results.csv) -gt 1 ]
+
   # AddressSanitizer + LeakSanitizer (advisory - doesn't block PRs)
   sanitize-address:
     runs-on: ubuntu-latest
@@ -66,3 +114,58 @@ jobs:
           make test CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -fPIC -I. -DHAVE_LAPACK -fsanitize=undefined -fno-omit-frame-pointer" LDFLAGS="-lm -llapacke -lblas -lopenblas -fsanitize=undefined"
         env:
           UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1
+
+  # Examples with AddressSanitizer
+  examples-sanitize:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Build library with ASan
+        run: |
+          make clean
+          CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -fPIC -I. -DHAVE_LAPACK -fsanitize=address -fno-omit-frame-pointer" \
+          LDFLAGS="-lm -llapacke -lblas -lopenblas -fsanitize=address" \
+          make lib
+
+      - name: Build examples with ASan
+        run: |
+          CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -I../.. -I../common -DHAVE_LAPACK -fsanitize=address -fno-omit-frame-pointer" \
+          LDFLAGS="-L../.. -lsrukf -lm -llapacke -lblas -lopenblas -Wl,-rpath,../.. -fsanitize=address" \
+          make -C examples/01_pendulum
+          
+          CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -I../.. -I../common -DHAVE_LAPACK -fsanitize=address -fno-omit-frame-pointer" \
+          LDFLAGS="-L../.. -lsrukf -lm -llapacke -lblas -lopenblas -Wl,-rpath,../.. -fsanitize=address" \
+          make -C examples/02_gps_imu_1d
+          
+          CFLAGS="-Wall -Wextra -Wpedantic -O1 -g -I../.. -I../common -DHAVE_LAPACK -fsanitize=address -fno-omit-frame-pointer" \
+          LDFLAGS="-L../.. -lsrukf -lm -llapacke -lblas -lopenblas -Wl,-rpath,../.. -fsanitize=address" \
+          make -C examples/03_stability_test
+
+      - name: Run pendulum with ASan
+        run: |
+          cd examples/01_pendulum
+          ./pendulum --duration=0.5 --format=csv
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+
+      - name: Run GPS+IMU with ASan
+        run: |
+          cd examples/02_gps_imu_1d
+          ./gps_imu --duration=2 --format=csv
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+
+      - name: Run stability test with ASan
+        run: |
+          cd examples/03_stability_test
+          ./stability --duration=5 --format=csv
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
