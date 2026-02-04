@@ -43,3 +43,8 @@ examples/01_pendulum/pendulum
 examples/02_gps_imu_1d/gps_imu
 examples/03_stability_test/stability
 examples/common/*.o
+
+# Generated output files (keep pre-generated SVGs)
+examples/**/*.csv
+examples/**/*.json
+!examples/**/*.svg
