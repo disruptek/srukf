@@ -3,10 +3,10 @@
 SRUKF_DIR = ../..
 COMMON_DIR = ../common
 
-# Compiler and flags
-CC = gcc
-CFLAGS = -Wall -Wextra -Wpedantic -O2 -I$(SRUKF_DIR) -I$(COMMON_DIR) -DHAVE_LAPACK -std=c99
-LDFLAGS = -L$(SRUKF_DIR) -lsrukf -lm -llapacke -lblas -lopenblas -Wl,-rpath,$(SRUKF_DIR)
+# Compiler and flags (use ?= to allow override for sanitizers)
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -Wpedantic -O2 -I$(SRUKF_DIR) -I$(COMMON_DIR) -DHAVE_LAPACK -std=c99
+LDFLAGS ?= -L$(SRUKF_DIR) -lsrukf -lm -llapacke -lblas -lopenblas -Wl,-rpath,$(SRUKF_DIR)
 
 # Targets
 TARGET = stability
