@@ -415,6 +415,7 @@ class AlgorithmStepsViz {
     this.trueStates = [];
     this.estimates = [];
     this.measurements = [];
+    this.measurementSteps = []; // Track which step each measurement was taken
     this.uncertainties = [];
     
     this.reset();
@@ -428,6 +429,7 @@ class AlgorithmStepsViz {
     this.trueStates = [0.0];
     this.estimates = [0.0];
     this.measurements = [];
+    this.measurementSteps = [];
     this.uncertainties = [this.covariance];
     this.updateStepDisplay();
   }
@@ -473,6 +475,7 @@ class AlgorithmStepsViz {
     const trueState = this.trueStates[this.trueStates.length - 1];
     this.measurement = trueState + (Math.random() - 0.5) * 2 * measurementNoise;
     this.measurements.push(this.measurement);
+    this.measurementSteps.push(this.trueStates.length - 1); // Record which step this measurement is for
     
     this.updateExplanation('Measure',
       `Received measurement: ${this.measurement.toFixed(2)}. ` +
@@ -617,8 +620,8 @@ class AlgorithmStepsViz {
     // Draw measurements
     ctx.fillStyle = '#FF6347';
     this.measurements.forEach((val, i) => {
-      // Measurements happen every 3 steps
-      const x = toScreenX((i + 1) * 3 - 1);
+      const stepIndex = this.measurementSteps[i];
+      const x = toScreenX(stepIndex);
       const y = toScreenY(val);
       ctx.beginPath();
       ctx.arc(x, y, 5, 0, 2 * Math.PI);
