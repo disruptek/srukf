@@ -1,0 +1,13 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: srukf
+Description: @PROJECT_DESCRIPTION@
+URL: https://github.com/disruptek/srukf
+Version: @PROJECT_VERSION@
+Requires: lapacke cblas
+Libs: -L${libdir} -lsrukf
+Libs.private: -lm
+Cflags: -I${includedir}

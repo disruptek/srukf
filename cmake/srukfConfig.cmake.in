@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(PkgConfig MODULE)
+pkg_check_modules(LAPACKE REQUIRED IMPORTED_TARGET lapacke)
+pkg_check_modules(CBLAS   REQUIRED IMPORTED_TARGET cblas)
+
+include("${CMAKE_CURRENT_LIST_DIR}/srukfTargets.cmake")
+
+check_required_components(srukf)

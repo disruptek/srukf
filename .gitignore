@@ -16,6 +16,11 @@ docs/*
 !docs/Doxyfile
 !docs/doxygen-awesome-css/
 !docs/src/
+!docs/building-with-cmake.md
+!docs/vcpkg-port-guide.md
+
+# CMake build directory
+build/
 
 # Editor/IDE
 *.swp
