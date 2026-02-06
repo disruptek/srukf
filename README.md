@@ -1,6 +1,10 @@
 # srukf
 
 [![CI](https://github.com/disruptek/srukf/actions/workflows/ci.yml/badge.svg)](https://github.com/disruptek/srukf/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/disruptek/srukf/branch/main/graph/badge.svg)](https://codecov.io/gh/disruptek/srukf)
+[![PyPI](https://img.shields.io/pypi/v/srukf.svg)](https://pypi.org/project/srukf/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://disruptek.github.io/srukf/)
 
 C implementation of the Square-Root Unscented Kalman Filter.
 
