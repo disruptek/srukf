@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770503390709,
+  "lastUpdate": 1770503689778,
   "repoUrl": "https://github.com/disruptek/srukf",
   "entries": {
     "Benchmark": [
@@ -143,6 +143,150 @@ window.BENCHMARK_DATA = {
           {
             "name": "nonlin/correct_to",
             "value": 3.119,
+            "unit": "us"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@andy.disruptek.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "committer": {
+            "email": "github@andy.disruptek.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "distinct": true,
+          "id": "7901652fef1336760a745692d0740a7645b6f5be",
+          "message": "Fix CMake: be flexible with BLAS library naming (cblas, blas, or openblas)",
+          "timestamp": "2026-02-07T17:33:32-05:00",
+          "tree_id": "1843e166a9d15d4ad694ec0ba69a07551bce9390",
+          "url": "https://github.com/disruptek/srukf/commit/7901652fef1336760a745692d0740a7645b6f5be"
+        },
+        "date": 1770503689398,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "3x2/predict",
+            "value": 1.402,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/predict_to",
+            "value": 1.396,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct",
+            "value": 2.211,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct_to",
+            "value": 2.207,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict",
+            "value": 3.24,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict_to",
+            "value": 1.951,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct",
+            "value": 3.147,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct_to",
+            "value": 3.202,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict",
+            "value": 3.704,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict_to",
+            "value": 3.692,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct",
+            "value": 7.305,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct_to",
+            "value": 7.32,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict",
+            "value": 7.359,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict_to",
+            "value": 7.305,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct",
+            "value": 19.374,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct_to",
+            "value": 19.179,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict",
+            "value": 11.716,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict_to",
+            "value": 11.763,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct",
+            "value": 37.058,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct_to",
+            "value": 36.856,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict",
+            "value": 2.676,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict_to",
+            "value": 3.381,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct",
+            "value": 2.997,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct_to",
+            "value": 3.166,
             "unit": "us"
           }
         ]
