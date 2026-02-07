@@ -1,0 +1,83 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Build
+        run: make lib
+
+      - name: Run benchmark
+        run: make -s bench > benchmark_output.txt
+
+      - name: Convert to benchmark-action JSON
+        run: |
+          python3 << 'PYEOF'
+          import json, re
+
+          results = []
+          last_dim = ""
+
+          with open("benchmark_output.txt") as f:
+              for line in f:
+                  parts = line.split()
+                  if len(parts) < 5:
+                      continue
+
+                  # Try 6-column format: dim op mean stddev min max
+                  if len(parts) >= 6:
+                      try:
+                          mean = float(parts[2])
+                          dim, op = parts[0], parts[1]
+                          last_dim = dim
+                          results.append({"name": f"{dim}/{op}", "unit": "us", "value": mean})
+                          continue
+                      except ValueError:
+                          pass
+
+                  # Try 5-column format (continuation): op mean stddev min max
+                  if len(parts) >= 5:
+                      try:
+                          mean = float(parts[1])
+                          op = parts[0]
+                          dim = last_dim
+                          results.append({"name": f"{dim}/{op}", "unit": "us", "value": mean})
+                      except ValueError:
+                          pass
+
+          with open("benchmark_results.json", "w") as f:
+              json.dump(results, f, indent=2)
+
+          print(f"Converted {len(results)} benchmark results")
+          PYEOF
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: benchmark_results.json
+          alert-threshold: '120%'
+          fail-on-alert: false
+          comment-on-alert: true
+          # Only push results to gh-pages on main branch
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          benchmark-data-dir-path: dev/bench

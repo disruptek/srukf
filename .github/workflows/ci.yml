@@ -169,3 +169,142 @@ jobs:
           ./stability --duration=5 --format=csv
         env:
           ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+
+  # Code coverage with gcov + lcov
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev lcov
+
+      - name: Build with coverage and run tests
+        run: make coverage
+
+      - name: Generate lcov report
+        run: |
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          files: coverage.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Generate HTML coverage report
+        run: |
+          genhtml coverage.info --output-directory coverage-report
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report/
+
+  # CMake build testing
+  cmake-build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Configure CMake
+        run: |
+          mkdir build
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run tests via CTest
+        run: ctest --output-on-failure
+        working-directory: build
+
+      - name: Test installation
+        run: |
+          cmake --install build --prefix "${{ runner.temp }}/srukf-install"
+
+      - name: Verify downstream find_package usage
+        run: |
+          mkdir downstream && cd downstream
+          cat > CMakeLists.txt << 'EOF'
+          cmake_minimum_required(VERSION 3.15)
+          project(downstream_test C)
+          find_package(PkgConfig MODULE REQUIRED)
+          find_package(srukf REQUIRED)
+          add_executable(smoke smoke.c)
+          target_link_libraries(smoke PRIVATE srukf::srukf)
+          EOF
+
+          cat > smoke.c << 'EOF'
+          #include "srukf.h"
+          int main(void) {
+              srukf *ukf = srukf_create(3, 2);
+              if (!ukf) return 1;
+              srukf_free(ukf);
+              return 0;
+          }
+          EOF
+
+          cmake -S . -B build \
+            -DCMAKE_PREFIX_PATH="${{ runner.temp }}/srukf-install"
+          cmake --build build
+          ./build/smoke
+
+  # Python bindings
+  python-package:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Build C library
+        run: make lib
+
+      - name: Install Python package
+        run: |
+          cd python
+          pip install -e '.[test]'
+
+      - name: Run pytest
+        run: |
+          cd python
+          pytest -v
+
+      - name: Run examples
+        run: |
+          cd python
+          python examples/simple.py
+          python examples/pendulum.py
