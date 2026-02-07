@@ -1,0 +1,46 @@
+{
+  "title": "SR-UKF: Square-Root Unscented Kalman Filter",
+  "description": "A numerically stable implementation of the Unscented Kalman Filter using square-root covariance propagation for nonlinear state estimation in safety-critical systems.",
+  "version": "1.0.0",
+  "upload_type": "software",
+  "creators": [
+    {
+      "name": "Davidoff, Andy",
+      "affiliation": "Independent"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "Kalman filter",
+    "unscented transform",
+    "square-root",
+    "state estimation",
+    "sensor fusion",
+    "nonlinear filtering",
+    "robotics",
+    "navigation",
+    "BLAS",
+    "LAPACK"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/disruptek/srukf",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "10.1109/JPROC.2003.823141",
+      "relation": "cites",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.1109/ICASSP.2001.940586",
+      "relation": "cites",
+      "scheme": "doi"
+    }
+  ],
+  "communities": [
+    {"identifier": "zenodo"}
+  ],
+  "grants": []
+}
