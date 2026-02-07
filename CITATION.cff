@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "SR-UKF: Square-Root Unscented Kalman Filter"
+version: 1.0.0
+date-released: 2026-02-06
+url: "https://github.com/disruptek/srukf"
+repository-code: "https://github.com/disruptek/srukf"
+license: MIT
+authors:
+  - family-names: "Davidoff"
+    given-names: "Andy"
+    alias: "disruptek"
+    affiliation: "Independent"
+keywords:
+  - "Kalman filter"
+  - "unscented transform"
+  - "square-root"
+  - "state estimation"
+  - "sensor fusion"
+  - "nonlinear filtering"
+  - "robotics"
+  - "navigation"
+abstract: >-
+  A numerically stable implementation of the Unscented Kalman Filter
+  using square-root covariance propagation. Suitable for safety-critical
+  systems requiring long-duration operation with nonlinear dynamics.
+references:
+  - type: article
+    authors:
+      - family-names: "Julier"
+        given-names: "Simon J."
+      - family-names: "Uhlmann"
+        given-names: "Jeffrey K."
+    title: "Unscented filtering and nonlinear estimation"
+    journal: "Proceedings of the IEEE"
+    year: 2004
+    volume: 92
+    issue: 3
+    start: 401
+    end: 422
+    doi: "10.1109/JPROC.2003.823141"
+  - type: conference-paper
+    authors:
+      - family-names: "Van der Merwe"
+        given-names: "Rudolph"
+      - family-names: "Wan"
+        given-names: "Eric A."
+    title: "The square-root unscented Kalman filter for state and parameter-estimation"
+    conference:
+      name: "IEEE International Conference on Acoustics, Speech, and Signal Processing (ICASSP)"
+    year: 2001
+    volume: 6
+    start: 3461
+    end: 3464
+    doi: "10.1109/ICASSP.2001.940586"

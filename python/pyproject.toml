@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "numpy>=1.19.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "srukf"
+version = "1.0.0"
+description = "Square-Root Unscented Kalman Filter"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [{name = "disruptek"}]
+keywords = ["kalman-filter", "state-estimation", "sensor-fusion", "ukf"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = ["numpy>=1.19.0"]
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.3.0"]
+test = ["pytest>=6.0", "scipy>=1.5.0"]
+docs = ["sphinx>=4.0", "sphinx-rtd-theme"]
+
+[project.urls]
+Homepage = "https://github.com/disruptek/srukf"
+Documentation = "https://disruptek.github.io/srukf/"
+Repository = "https://github.com/disruptek/srukf"
+
+[tool.setuptools.packages.find]
+include = ["srukf*"]
+
+[tool.setuptools.package-data]
+srukf = ["*.so", "*.dll", "*.dylib"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
