@@ -516,10 +516,27 @@ static int run_stability_test(const test_config_t *cfg) {
   }
   printf("=============================================================\n\n");
 
-  /* Generate plots */
-  if (cfg->format != OUTPUT_CSV && cfg->format != OUTPUT_JSON) {
-    printf("Generating outputs...\n");
+  /* Generate outputs */
+  printf("Generating outputs...\n");
 
+  /* Generate CSV output */
+  if (cfg->format == OUTPUT_CSV || cfg->format == OUTPUT_ALL) {
+    FILE *fp = fopen("stability_results.csv", "w");
+    if (fp) {
+      fprintf(fp, "time\tposition_error\tvelocity_error\tcov_"
+                  "trace\tnees\tcondition\n");
+      for (size_t i = 0; i < n_steps; i++) {
+        fprintf(fp, "%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6e\n", time[i],
+                pos_error[i], vel_error[i], cov_trace[i], nees[i],
+                condition[i]);
+      }
+      fclose(fp);
+      printf("  ✓ Generated: stability_results.csv\n");
+    }
+  }
+
+  /* Generate SVG plots */
+  if (cfg->format == OUTPUT_SVG || cfg->format == OUTPUT_ALL) {
     data_series_t series_error[] = {{.name = "Position Error",
                                      .timestamps = time,
                                      .values = pos_error,
@@ -541,43 +558,26 @@ static int run_stability_test(const test_config_t *cfg) {
                                      .style = "lines",
                                      .color = "#FF8C00"}};
 
-    if (cfg->format == OUTPUT_SVG || cfg->format == OUTPUT_ALL) {
-      plot_config_t cfg_error = plot_config_default();
-      cfg_error.title = "Position Error Over Time";
-      cfg_error.xlabel = "Time (s)";
-      cfg_error.ylabel = "Error (m)";
-      plot_generate_svg("stability_error.svg", &cfg_error, series_error, 1,
-                        cfg->open_viewer);
+    plot_config_t cfg_error = plot_config_default();
+    cfg_error.title = "Position Error Over Time";
+    cfg_error.xlabel = "Time (s)";
+    cfg_error.ylabel = "Error (m)";
+    plot_generate_svg("stability_error.svg", &cfg_error, series_error, 1,
+                      cfg->open_viewer);
 
-      plot_config_t cfg_nees = plot_config_default();
-      cfg_nees.title = "NEES Consistency Test";
-      cfg_nees.xlabel = "Time (s)";
-      cfg_nees.ylabel = "NEES";
-      plot_generate_svg("stability_nees.svg", &cfg_nees, series_nees, 1,
-                        cfg->open_viewer);
+    plot_config_t cfg_nees = plot_config_default();
+    cfg_nees.title = "NEES Consistency Test";
+    cfg_nees.xlabel = "Time (s)";
+    cfg_nees.ylabel = "NEES";
+    plot_generate_svg("stability_nees.svg", &cfg_nees, series_nees, 1,
+                      cfg->open_viewer);
 
-      plot_config_t cfg_trace = plot_config_default();
-      cfg_trace.title = "Covariance Trace Evolution";
-      cfg_trace.xlabel = "Time (s)";
-      cfg_trace.ylabel = "Trace";
-      plot_generate_svg("stability_trace.svg", &cfg_trace, series_trace, 1,
-                        cfg->open_viewer);
-    }
-
-    if (cfg->format == OUTPUT_CSV || cfg->format == OUTPUT_ALL) {
-      FILE *fp = fopen("stability_results.csv", "w");
-      if (fp) {
-        fprintf(fp, "time\tposition_error\tvelocity_error\tcov_"
-                    "trace\tnees\tcondition\n");
-        for (size_t i = 0; i < n_steps; i++) {
-          fprintf(fp, "%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6e\n", time[i],
-                  pos_error[i], vel_error[i], cov_trace[i], nees[i],
-                  condition[i]);
-        }
-        fclose(fp);
-        printf("  ✓ Generated: stability_results.csv\n");
-      }
-    }
+    plot_config_t cfg_trace = plot_config_default();
+    cfg_trace.title = "Covariance Trace Evolution";
+    cfg_trace.xlabel = "Time (s)";
+    cfg_trace.ylabel = "Trace";
+    plot_generate_svg("stability_trace.svg", &cfg_trace, series_trace, 1,
+                      cfg->open_viewer);
   }
 
   /* Cleanup */
