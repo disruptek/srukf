@@ -547,7 +547,11 @@ static int run_simulation(const sim_config_t *cfg) {
 
   if (cfg->format == OUTPUT_CSV || cfg->format == OUTPUT_ALL) {
     printf("  Writing CSV...\n");
-    plot_write_csv("gps_imu_position", pos_series, 3);
+    /* Write truth vs estimate separately */
+    data_series_t truth_series[] = {pos_series[0]};    /* True Position */
+    data_series_t estimate_series[] = {pos_series[2]}; /* SR-UKF Estimate */
+    plot_write_csv("gps_imu_truth", truth_series, 1);
+    plot_write_csv("gps_imu_estimate", estimate_series, 1);
   }
 
   if (cfg->format == OUTPUT_JSON || cfg->format == OUTPUT_ALL) {

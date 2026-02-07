@@ -87,7 +87,7 @@ int main(void) {
   }
 
   /* ---- 4. Verify sigma‑point generation */
-  srukf_index n_sigma = 2 * N + 1;              /* 15 */
+  srukf_index n_sigma = 2 * N + 1;               /* 15 */
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(N, n_sigma); /* N rows, 2N+1 columns */
   rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, Xsig);
   if (rc != SRUKF_RETURN_OK) {
@@ -179,6 +179,8 @@ int main(void) {
   srukf_free(ukf);
   srukf_mat_free(Xsig);
   srukf_mat_free(z);
+  srukf_mat_free(Qsqrt);
+  srukf_mat_free(Rsqrt);
 
   printf("all checks passed.\n");
   return 0;

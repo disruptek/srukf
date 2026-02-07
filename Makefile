@@ -117,8 +117,10 @@ coverage: CFLAGS += --coverage
 coverage: LDFLAGS += --coverage
 coverage: clean lib $(TEST_BINS)
 	@for t in $(TEST_BINS); do $$t || true; done
-	gcov srukf.c
-	@echo "Coverage report in srukf.c.gcov"
+	@# gcov produces .gcov files from .gcda runtime data
+	@# Since srukf.c is compiled into each test, we'll have multiple .gcda files
+	gcov srukf.c 2>/dev/null || true
+	@echo "Coverage data collected. Use 'lcov --capture --directory . --output-file coverage.info' for detailed reports."
 
 docs:
 	@echo "Generating Doxygen documentation (HTML + Markdown)..."
