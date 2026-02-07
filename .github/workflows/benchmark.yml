@@ -26,22 +26,30 @@ jobs:
         run: make lib
 
       - name: Run benchmark
-        run: make -s bench > benchmark_output.txt
+        run: make bench > benchmark_output.txt 2>&1
 
       - name: Convert to benchmark-action JSON
         run: |
           python3 << 'PYEOF'
-          import json, re
+          import json
+          import sys
 
           results = []
           last_dim = ""
 
-          with open("benchmark_output.txt") as f:
-              for line in f:
+          try:
+              with open("benchmark_output.txt") as f:
+                  lines = f.readlines()
+              
+              for line in lines:
                   parts = line.split()
                   if len(parts) < 5:
                       continue
 
+                  # Skip header lines
+                  if parts[0] in ("Dim", "---", "Model", "-----", "SR-UKF", "Warmup", "Benchmark"):
+                      continue
+                  
                   # Try 6-column format: dim op mean stddev min max
                   if len(parts) >= 6:
                       try:
@@ -50,24 +58,50 @@ jobs:
                           last_dim = dim
                           results.append({"name": f"{dim}/{op}", "unit": "us", "value": mean})
                           continue
-                      except ValueError:
+                      except (ValueError, IndexError):
                           pass
 
                   # Try 5-column format (continuation): op mean stddev min max
-                  if len(parts) >= 5:
+                  if len(parts) >= 5 and last_dim:
                       try:
                           mean = float(parts[1])
                           op = parts[0]
-                          dim = last_dim
-                          results.append({"name": f"{dim}/{op}", "unit": "us", "value": mean})
-                      except ValueError:
+                          if op not in ("---", "==="):
+                              results.append({"name": f"{last_dim}/{op}", "unit": "us", "value": mean})
+                      except (ValueError, IndexError):
                           pass
 
-          with open("benchmark_results.json", "w") as f:
-              json.dump(results, f, indent=2)
+              with open("benchmark_results.json", "w") as f:
+                  json.dump(results, f, indent=2)
 
-          print(f"Converted {len(results)} benchmark results")
+              print(f"✓ Converted {len(results)} benchmark results")
+              if len(results) == 0:
+                  print("WARNING: No results parsed! Sample of input:")
+                  for line in lines[:20]:
+                      print(f"  {line.rstrip()}")
+              else:
+                  print("Sample results:")
+                  for r in results[:5]:
+                      print(f"  {r['name']}: {r['value']}{r['unit']}")
+              
+              sys.exit(0 if len(results) > 0 else 1)
+          except Exception as e:
+              print(f"ERROR: {e}", file=sys.stderr)
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
           PYEOF
+
+      - name: Verify benchmark results exist
+        run: |
+          if [ -f benchmark_results.json ]; then
+            echo "✓ Benchmark results file created"
+            wc -l benchmark_results.json
+            head -20 benchmark_results.json
+          else
+            echo "✗ ERROR: benchmark_results.json not found!"
+            exit 1
+          fi
 
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
