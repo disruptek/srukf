@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770504063067,
+  "lastUpdate": 1770504443632,
   "repoUrl": "https://github.com/disruptek/srukf",
   "entries": {
     "Benchmark": [
@@ -431,6 +431,150 @@ window.BENCHMARK_DATA = {
           {
             "name": "nonlin/correct_to",
             "value": 3.132,
+            "unit": "us"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@andy.disruptek.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "committer": {
+            "email": "github@andy.disruptek.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "distinct": true,
+          "id": "321b73feaff2e0d9374c2814194df65827c1b576",
+          "message": "Fix stability example CSV output and CMake downstream find_package\n\nTwo fixes for remaining CI job failures:\n\n1. **Stability example CSV output**: Fixed logic error where CSV generation code\n   was inside a negated conditional (format != CSV), making it unreachable.\n   Restructured output generation to properly generate CSV when requested.\n   Stability now correctly generates stability_results.csv with all timestep data.\n\n2. **CMake downstream find_package target**: Added srukf::srukf alias target in\n   srukfConfig.cmake.in that points to the primary available target (shared or\n   static). This allows downstream projects to use find_package(srukf) and\n   target_link_libraries(exe srukf::srukf) without caring about implementation details.\n   The config intelligently aliases to srukf_shared if available, otherwise static.",
+          "timestamp": "2026-02-07T17:44:47-05:00",
+          "tree_id": "7dfbacf8d82313e3e207241ac80386ebaaa1fe02",
+          "url": "https://github.com/disruptek/srukf/commit/321b73feaff2e0d9374c2814194df65827c1b576"
+        },
+        "date": 1770504442968,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "3x2/predict",
+            "value": 1.629,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/predict_to",
+            "value": 1.604,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct",
+            "value": 2.307,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct_to",
+            "value": 2.3,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict",
+            "value": 2.541,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict_to",
+            "value": 1.826,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct",
+            "value": 2.709,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct_to",
+            "value": 2.73,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict",
+            "value": 3.624,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict_to",
+            "value": 3.592,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct",
+            "value": 7.193,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct_to",
+            "value": 7.183,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict",
+            "value": 7.194,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict_to",
+            "value": 7.159,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct",
+            "value": 19.513,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct_to",
+            "value": 19.883,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict",
+            "value": 11.619,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict_to",
+            "value": 11.648,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct",
+            "value": 42.982,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct_to",
+            "value": 44.275,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict",
+            "value": 2.5,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict_to",
+            "value": 3.175,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct",
+            "value": 2.743,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct_to",
+            "value": 2.744,
             "unit": "us"
           }
         ]
