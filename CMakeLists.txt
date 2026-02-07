@@ -24,7 +24,15 @@ endif()
 # (CMake 4 removed the built-in FindBLAS/FindLAPACK modules).
 find_package(PkgConfig MODULE REQUIRED)
 pkg_check_modules(LAPACKE REQUIRED IMPORTED_TARGET lapacke)
-pkg_check_modules(CBLAS   REQUIRED IMPORTED_TARGET cblas)
+
+# Try to find CBLAS - systems name it differently (cblas, blas, or openblas)
+pkg_check_modules(CBLAS IMPORTED_TARGET cblas)
+if(NOT CBLAS_FOUND)
+  pkg_check_modules(CBLAS IMPORTED_TARGET blas)
+endif()
+if(NOT CBLAS_FOUND)
+  pkg_check_modules(CBLAS REQUIRED IMPORTED_TARGET openblas)
+endif()
 
 # Verify the C headers are actually usable.
 include(CheckIncludeFile)
