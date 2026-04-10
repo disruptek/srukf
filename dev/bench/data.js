@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770504443632,
+  "lastUpdate": 1775831776151,
   "repoUrl": "https://github.com/disruptek/srukf",
   "entries": {
     "Benchmark": [
@@ -575,6 +575,150 @@ window.BENCHMARK_DATA = {
           {
             "name": "nonlin/correct_to",
             "value": 2.744,
+            "unit": "us"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@andy.disruptek.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "committer": {
+            "email": "github@andy.disruptek.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "distinct": true,
+          "id": "0f6f61afc7309cdd867232cb03204e167a34d68d",
+          "message": "rm garbage",
+          "timestamp": "2026-04-10T10:35:46-04:00",
+          "tree_id": "6e4e2106d17a3e4e63448884277f95dbded013f4",
+          "url": "https://github.com/disruptek/srukf/commit/0f6f61afc7309cdd867232cb03204e167a34d68d"
+        },
+        "date": 1775831775756,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "3x2/predict",
+            "value": 2.378,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/predict_to",
+            "value": 2.548,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct",
+            "value": 4.183,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct_to",
+            "value": 1.219,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict",
+            "value": 1.815,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict_to",
+            "value": 1.803,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct",
+            "value": 2.758,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct_to",
+            "value": 2.813,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict",
+            "value": 3.997,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict_to",
+            "value": 4.019,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct",
+            "value": 7.239,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct_to",
+            "value": 7.286,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict",
+            "value": 7.314,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict_to",
+            "value": 7.199,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct",
+            "value": 19.609,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct_to",
+            "value": 19.426,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict",
+            "value": 11.657,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict_to",
+            "value": 11.578,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct",
+            "value": 39.585,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct_to",
+            "value": 39.106,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict",
+            "value": 2.476,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict_to",
+            "value": 3.197,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct",
+            "value": 2.749,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct_to",
+            "value": 2.756,
             "unit": "us"
           }
         ]
