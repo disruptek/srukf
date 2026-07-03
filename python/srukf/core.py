@@ -66,6 +66,15 @@ _RETURN_EXCEPTIONS = {
 }
 
 
+def lib_version() -> str:
+    """Version string of the loaded C library (e.g. ``"1.1.0"``).
+
+    This is the runtime library's version, which can differ from the
+    Python package's ``srukf.__version__`` if they were built separately.
+    """
+    return lib.srukf_version().decode("ascii")
+
+
 def _check(rc: int, context: str = "") -> None:
     """Translate a C return code into a Python exception."""
     if rc == SRUKF_RETURN_OK:
@@ -82,41 +91,67 @@ def _check(rc: int, context: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 
+def _wrap_model(
+    py_func: Callable[..., np.ndarray],
+    out_dim: int,
+    kwargs: dict[str, Any],
+    errors: list,
+    ctype: Any,
+    what: str,
+) -> Any:
+    """Wrap a Python model into a C callback with exception containment.
+
+    ctypes cannot propagate a Python exception through the C boundary: it
+    prints the traceback and returns as if nothing happened, leaving the
+    output buffer holding stale workspace values — finite garbage that
+    the C library would happily fold into the estimate. Instead we record
+    the exception in ``errors`` (re-raised by the caller after the C call
+    returns) and fill the output with NaN so the C library aborts the
+    step and leaves the filter state untouched.
+    """
+
+    def _cb(x_in_p: Any, out_p: Any, _user: Any) -> None:
+        mat_out = out_p.contents
+        try:
+            x_in = srukf_mat_to_numpy(x_in_p, copy=True).ravel()
+            out = np.asarray(py_func(x_in, **kwargs), dtype=np.float64).ravel()
+            if out.shape[0] != out_dim:
+                raise SrukfParameterError(
+                    f"{what} returned {out.shape[0]} values, expected {out_dim}"
+                )
+            for i in range(out_dim):
+                mat_out.data[i] = out[i]
+        except Exception as exc:  # noqa: BLE001 - must not cross C boundary
+            if not errors:
+                errors.append(exc)
+            for i in range(out_dim):
+                mat_out.data[i] = float("nan")
+
+    return ctype(_cb)
+
+
 def _make_process_callback(
     py_func: Callable[..., np.ndarray],
     state_dim: int,
     kwargs: dict[str, Any],
+    errors: list,
 ) -> ProcessModelFunc:
     """Wrap a Python ``f(x, **kw) -> x_next`` into a C callback."""
-
-    def _cb(x_in_p: POINTER(SrukfMat), x_out_p: POINTER(SrukfMat), _user: Any) -> None:
-        # Read input state
-        x_in = srukf_mat_to_numpy(x_in_p, copy=True).ravel()
-        # Call Python function
-        x_out = np.asarray(py_func(x_in, **kwargs), dtype=np.float64).ravel()
-        # Write output
-        mat_out = x_out_p.contents
-        for i in range(state_dim):
-            mat_out.data[i] = x_out[i]
-
-    return ProcessModelFunc(_cb)
+    return _wrap_model(
+        py_func, state_dim, kwargs, errors, ProcessModelFunc, "process model"
+    )
 
 
 def _make_meas_callback(
     py_func: Callable[..., np.ndarray],
     meas_dim: int,
     kwargs: dict[str, Any],
+    errors: list,
 ) -> MeasModelFunc:
     """Wrap a Python ``h(x, **kw) -> z`` into a C callback."""
-
-    def _cb(x_in_p: POINTER(SrukfMat), z_out_p: POINTER(SrukfMat), _user: Any) -> None:
-        x_in = srukf_mat_to_numpy(x_in_p, copy=True).ravel()
-        z_out = np.asarray(py_func(x_in, **kwargs), dtype=np.float64).ravel()
-        mat_out = z_out_p.contents
-        for i in range(meas_dim):
-            mat_out.data[i] = z_out[i]
-
-    return MeasModelFunc(_cb)
+    return _wrap_model(
+        py_func, meas_dim, kwargs, errors, MeasModelFunc, "measurement model"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +340,66 @@ class UnscentedKalmanFilter:
         s = self.S
         return s @ s.T
 
+    @property
+    def innovation(self) -> np.ndarray:
+        """Innovation ``z - z_predicted`` of the most recent update.
+
+        Raises
+        ------
+        SrukfParameterError
+            If no successful update has been performed yet.
+        """
+        m = self._meas_dim
+        out_mat = lib.srukf_mat_alloc(m, 1, 1)
+        if not out_mat:
+            raise MemoryError("Failed to allocate innovation buffer")
+        try:
+            _check(lib.srukf_get_innovation(self._ptr, out_mat), "get_innovation")
+            return srukf_mat_to_numpy(out_mat, copy=True).ravel()
+        finally:
+            lib.srukf_mat_free(out_mat)
+
+    @property
+    def innovation_sqrt_cov(self) -> np.ndarray:
+        """Sqrt-covariance ``Syy`` of the most recent update's innovation.
+
+        The innovation covariance is ``Syy @ Syy.T``.
+
+        Raises
+        ------
+        SrukfParameterError
+            If no successful update has been performed yet.
+        """
+        m = self._meas_dim
+        out_mat = lib.srukf_mat_alloc(m, m, 1)
+        if not out_mat:
+            raise MemoryError("Failed to allocate Syy buffer")
+        try:
+            _check(
+                lib.srukf_get_innovation_sqrt_cov(self._ptr, out_mat),
+                "get_innovation_sqrt_cov",
+            )
+            return srukf_mat_to_numpy(out_mat, copy=True)
+        finally:
+            lib.srukf_mat_free(out_mat)
+
+    @property
+    def nis(self) -> float:
+        """Normalized innovation squared of the most recent update.
+
+        Under correct tuning this follows a chi-square distribution with
+        *M* degrees of freedom — useful for measurement gating and filter
+        health monitoring.
+
+        Raises
+        ------
+        SrukfParameterError
+            If no successful update has been performed yet.
+        """
+        val = srukf_value(0.0)
+        _check(lib.srukf_get_nis(self._ptr, ctypes.byref(val)), "get_nis")
+        return float(val.value)
+
     # -- Methods ------------------------------------------------------------
 
     def predict(
@@ -341,13 +436,17 @@ class UnscentedKalmanFilter:
         ...     return np.array([x[0] + dt * x[1], x[1]])
         >>> ukf.predict(f, dt=0.05)
         """
-        cb = _make_process_callback(process_model, self._state_dim, kwargs)
+        errors: list = []
+        cb = _make_process_callback(process_model, self._state_dim, kwargs, errors)
         # prevent GC of the callback during the C call
         self._live_callbacks.append(cb)
         try:
-            _check(lib.srukf_predict(self._ptr, cb, None), "predict")
+            rc = lib.srukf_predict(self._ptr, cb, None)
         finally:
             self._live_callbacks.pop()
+        if errors:
+            raise errors[0]
+        _check(rc, "predict")
         return self
 
     def update(
@@ -387,13 +486,17 @@ class UnscentedKalmanFilter:
         """
         measurement = validate_vector(measurement, self._meas_dim, "measurement")
         z_mat = numpy_to_srukf_mat(measurement.reshape(-1, 1))
-        cb = _make_meas_callback(meas_model, self._meas_dim, kwargs)
+        errors: list = []
+        cb = _make_meas_callback(meas_model, self._meas_dim, kwargs, errors)
         self._live_callbacks.append(cb)
         try:
-            _check(lib.srukf_correct(self._ptr, z_mat, cb, None), "correct")
+            rc = lib.srukf_correct(self._ptr, z_mat, cb, None)
         finally:
             self._live_callbacks.pop()
             lib.srukf_mat_free(z_mat)
+        if errors:
+            raise errors[0]
+        _check(rc, "correct")
         return self
 
     def reset(self, init_std: float = 1.0) -> "UnscentedKalmanFilter":

@@ -6,7 +6,7 @@ import os
 
 class SrukfConan(ConanFile):
     name = "srukf"
-    version = "1.0.0"
+    version = "1.1.0"
     license = "MIT"
     author = "disruptek"
     url = "https://github.com/disruptek/srukf"

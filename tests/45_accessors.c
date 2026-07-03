@@ -465,6 +465,123 @@ static void test_sqrt_cov_roundtrip(void) {
   printf("  test_sqrt_cov_roundtrip OK\n");
 }
 
+/* ========================= srukf_version ============================ */
+
+#if !defined(SRUKF_VERSION_MAJOR) || !defined(SRUKF_VERSION)
+#error "srukf.h must define SRUKF_VERSION_MAJOR and SRUKF_VERSION"
+#endif
+
+static void test_version(void) {
+  const char *v = srukf_version();
+  assert(v != NULL);
+  /* runtime library and compile-time header must agree */
+  assert(strcmp(v, SRUKF_VERSION) == 0);
+  printf("  test_version         OK\n");
+}
+
+/* ==================== innovation accessors ========================== */
+
+/* identity measurement model */
+static void meas_identity(const srukf_mat *x, srukf_mat *z, void *user) {
+  (void)user;
+  for (srukf_index i = 0; i < z->n_rows; ++i)
+    SRUKF_ENTRY(z, i, 0) = SRUKF_ENTRY(x, i, 0);
+}
+
+/* identity process model */
+static void process_identity(const srukf_mat *x, srukf_mat *x_out,
+                             void *user) {
+  (void)user;
+  for (srukf_index i = 0; i < x->n_rows; ++i)
+    SRUKF_ENTRY(x_out, i, 0) = SRUKF_ENTRY(x, i, 0);
+}
+
+/* Before any correct step the innovation accessors must refuse. */
+static void test_innovation_before_correct(void) {
+  srukf *ukf = create_test_filter(2, 1);
+  assert(ukf);
+
+  srukf_mat *innov = SRUKF_MAT_ALLOC(1, 1);
+  srukf_mat *Syy = SRUKF_MAT_ALLOC(1, 1);
+  srukf_value nis;
+  assert(innov && Syy);
+
+  assert(srukf_get_innovation(ukf, innov) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_get_innovation_sqrt_cov(ukf, Syy) ==
+         SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_get_nis(ukf, &nis) == SRUKF_RETURN_PARAMETER_ERROR);
+
+  /* NULL handling */
+  assert(srukf_get_innovation(NULL, innov) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_get_innovation(ukf, NULL) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_get_nis(ukf, NULL) == SRUKF_RETURN_PARAMETER_ERROR);
+
+  srukf_mat_free(innov);
+  srukf_mat_free(Syy);
+  srukf_free(ukf);
+  printf("  test_innov_precond   OK\n");
+}
+
+/* Analytic scalar case: N = M = 1, identity h, x = 0, S = 1, R = 1,
+ * alpha = 1 (lambda = 0, so wm = (0, 1/2, 1/2), wc = (2, 1/2, 1/2)).
+ * Sigma points (0, 1, -1) map to themselves; the predicted measurement
+ * is 0. With z = 2:
+ *   innovation = 2
+ *   Syy^2 = wc1 * 1 + wc2 * 1 + R^2 = 2, so Syy = sqrt(2)
+ *   NIS = innov^2 / Syy^2 = 2
+ */
+static void test_innovation_values(void) {
+  srukf_mat *Q = SRUKF_MAT_ALLOC(1, 1);
+  srukf_mat *R = SRUKF_MAT_ALLOC(1, 1);
+  assert(Q && R);
+  SRUKF_ENTRY(Q, 0, 0) = 0.1;
+  SRUKF_ENTRY(R, 0, 0) = 1.0;
+  srukf *ukf = srukf_create_from_noise(Q, R);
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  assert(ukf);
+
+  assert(srukf_set_scale(ukf, 1.0, 2.0, 0.0) == SRUKF_RETURN_OK);
+  assert(srukf_reset(ukf, 1.0) == SRUKF_RETURN_OK);
+
+  srukf_mat *z = SRUKF_MAT_ALLOC(1, 1);
+  assert(z);
+  SRUKF_ENTRY(z, 0, 0) = 2.0;
+  assert(srukf_correct(ukf, z, meas_identity, NULL) == SRUKF_RETURN_OK);
+
+  srukf_mat *innov = SRUKF_MAT_ALLOC(1, 1);
+  srukf_mat *Syy = SRUKF_MAT_ALLOC(1, 1);
+  srukf_value nis = -1.0;
+  assert(innov && Syy);
+
+  assert(srukf_get_innovation(ukf, innov) == SRUKF_RETURN_OK);
+  assert(fabs(SRUKF_ENTRY(innov, 0, 0) - 2.0) < 1e-9);
+
+  assert(srukf_get_innovation_sqrt_cov(ukf, Syy) == SRUKF_RETURN_OK);
+  assert(fabs(SRUKF_ENTRY(Syy, 0, 0) - sqrt(2.0)) < 1e-9);
+
+  assert(srukf_get_nis(ukf, &nis) == SRUKF_RETURN_OK);
+  assert(fabs(nis - 2.0) < 1e-9);
+
+  /* the values describe the most recent correct and must survive a
+   * subsequent predict step */
+  assert(srukf_predict(ukf, process_identity, NULL) == SRUKF_RETURN_OK);
+  assert(srukf_get_innovation(ukf, innov) == SRUKF_RETURN_OK);
+  assert(fabs(SRUKF_ENTRY(innov, 0, 0) - 2.0) < 1e-9);
+
+  /* dimension mismatch is rejected */
+  srukf_mat *bad = SRUKF_MAT_ALLOC(2, 1);
+  assert(bad);
+  assert(srukf_get_innovation(ukf, bad) == SRUKF_RETURN_PARAMETER_ERROR);
+  srukf_mat_free(bad);
+
+  srukf_mat_free(innov);
+  srukf_mat_free(Syy);
+  srukf_mat_free(z);
+  srukf_free(ukf);
+  printf("  test_innov_values    OK\n");
+}
+
 int main(void) {
   printf("Running accessor function tests...\n");
 
@@ -507,6 +624,11 @@ int main(void) {
   /* Round-trip */
   test_state_roundtrip();
   test_sqrt_cov_roundtrip();
+
+  /* Version and innovation access */
+  test_version();
+  test_innovation_before_correct();
+  test_innovation_values();
 
   printf("accessor function tests passed.\n");
   return 0;

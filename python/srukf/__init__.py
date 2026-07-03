@@ -19,6 +19,7 @@ from .core import (
     SrukfMathError,
     SrukfParameterError,
     UnscentedKalmanFilter,
+    lib_version,
 )
 from .version import __version__, __version_info__
 
@@ -27,6 +28,7 @@ __all__ = [
     "SrukfError",
     "SrukfParameterError",
     "SrukfMathError",
+    "lib_version",
     "__version__",
     "__version_info__",
 ]

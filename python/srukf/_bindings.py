@@ -105,6 +105,8 @@ class SrukfFilter(Structure):
         ("wm", POINTER(srukf_value)),
         ("wc", POINTER(srukf_value)),
         ("ws", POINTER(SrukfWorkspace)),
+        ("diag_fn", c_void_p),  # per-instance diagnostic handler
+        ("diag_ctx", c_void_p),
     ]
 
 
@@ -206,6 +208,10 @@ def _load_library() -> ctypes.CDLL:
 def _declare_functions(lib: ctypes.CDLL) -> None:
     """Attach argtypes / restype to every public C function."""
 
+    # -- Version ------------------------------------------------------------
+    lib.srukf_version.argtypes = []
+    lib.srukf_version.restype = ctypes.c_char_p
+
     # -- Diagnostics --------------------------------------------------------
     lib.srukf_set_diag_callback.argtypes = [DiagFunc]
     lib.srukf_set_diag_callback.restype = None
@@ -303,6 +309,19 @@ def _declare_functions(lib: ctypes.CDLL) -> None:
         c_void_p,
     ]
     lib.srukf_correct_to.restype = c_int
+
+    # -- Innovation access ---------------------------------------------------
+    lib.srukf_get_innovation.argtypes = [POINTER(SrukfFilter), POINTER(SrukfMat)]
+    lib.srukf_get_innovation.restype = c_int
+
+    lib.srukf_get_innovation_sqrt_cov.argtypes = [
+        POINTER(SrukfFilter),
+        POINTER(SrukfMat),
+    ]
+    lib.srukf_get_innovation_sqrt_cov.restype = c_int
+
+    lib.srukf_get_nis.argtypes = [POINTER(SrukfFilter), POINTER(srukf_value)]
+    lib.srukf_get_nis.restype = c_int
 
     # -- Workspace ----------------------------------------------------------
     lib.srukf_alloc_workspace.argtypes = [POINTER(SrukfFilter)]

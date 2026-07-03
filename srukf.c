@@ -54,7 +54,38 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <cblas.h>
+#include <lapacke.h>
+
 #include "srukf.h"
+
+/** @brief BLAS layout constant */
+#define SRUKF_CBLAS_LAYOUT CblasColMajor
+/** @brief LAPACK layout constant */
+#define SRUKF_LAPACK_LAYOUT LAPACK_COL_MAJOR
+
+/* BLAS/LAPACK routine and math-function selection based on precision.
+ * The _work QR variant takes a caller-owned scratch buffer, keeping the
+ * predict/correct hot path free of heap allocation. */
+#ifdef SRUKF_SINGLE
+#define SRUKF_GEMM  cblas_sgemm         /**< Matrix multiply (single) */
+#define SRUKF_GEMV  cblas_sgemv         /**< Matrix-vector multiply (single) */
+#define SRUKF_TRSM  cblas_strsm         /**< Triangular solve (single) */
+#define SRUKF_TRSV  cblas_strsv         /**< Triangular vector solve (single) */
+#define SRUKF_GEQRF LAPACKE_sgeqrf_work /**< QR factorization (single) */
+#define SRUKF_POTRF LAPACKE_spotrf      /**< Cholesky factorization (single) */
+#define SRUKF_SQRT  sqrtf
+#define SRUKF_FABS  fabsf
+#else
+#define SRUKF_GEMM  cblas_dgemm         /**< Matrix multiply (double) */
+#define SRUKF_GEMV  cblas_dgemv         /**< Matrix-vector multiply (double) */
+#define SRUKF_TRSM  cblas_dtrsm         /**< Triangular solve (double) */
+#define SRUKF_TRSV  cblas_dtrsv         /**< Triangular vector solve (double) */
+#define SRUKF_GEQRF LAPACKE_dgeqrf_work /**< QR factorization (double) */
+#define SRUKF_POTRF LAPACKE_dpotrf      /**< Cholesky factorization (double) */
+#define SRUKF_SQRT  sqrt
+#define SRUKF_FABS  fabs
+#endif
 
 /** @brief Default sigma point spread parameter */
 #define DEFAULT_ALPHA 1e-3
@@ -62,8 +93,17 @@
 #define DEFAULT_BETA 2.0
 /** @brief Default secondary scaling parameter */
 #define DEFAULT_KAPPA 1.0
-/** @brief Numerical tolerance for near-zero checks */
+/** @brief Numerical tolerance for near-zero checks, scaled to the
+ * working precision: values below this are treated as zero. */
+#ifdef SRUKF_SINGLE
+#define SRUKF_EPS 1e-6f
+#else
 #define SRUKF_EPS 1e-12
+#endif
+
+const char *srukf_version(void) {
+  return SRUKF_VERSION;
+}
 
 /*============================================================================
  * @internal
@@ -129,14 +169,28 @@ void srukf_set_diag_callback(srukf_diag_fn fn) {
 /**
  * @brief Report a diagnostic message
  *
- * If a diagnostic callback is registered, invokes it with the message.
- * Used throughout the implementation to report errors and warnings.
+ * Routes to the instance's handler when one is set, else to the global
+ * callback. Helpers that have no filter at hand pass NULL and reach the
+ * global callback only.
  *
+ * @param ukf Filter instance the message concerns (may be NULL)
  * @param msg Message to report
  */
-static void diag_report(const char *msg) {
+static void diag_report(const srukf *ukf, const char *msg) {
+  if (ukf && ukf->diag_fn) {
+    ukf->diag_fn(msg, ukf->diag_ctx);
+    return;
+  }
   if (g_diag_callback)
     g_diag_callback(msg);
+}
+
+srukf_return srukf_set_diag(srukf *ukf, srukf_diag_handler fn, void *ctx) {
+  if (!ukf)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  ukf->diag_fn = fn;
+  ukf->diag_ctx = ctx;
+  return SRUKF_RETURN_OK;
 }
 
 /** @} */ /* end impl_diag */
@@ -146,14 +200,14 @@ static void diag_report(const char *msg) {
  *============================================================================*/
 
 /* Core sigma point operations */
-static srukf_return
-propagate_sigma_points(const srukf_mat *Xsig, srukf_mat *Ysig,
-                       void (*func)(const srukf_mat *, srukf_mat *, void *),
-                       void *user);
+static srukf_return propagate_sigma_points(const srukf_mat *Xsig,
+                                           srukf_mat *Ysig,
+                                           srukf_model_fn func, void *user);
 static srukf_return
 compute_cross_covariance(const srukf_mat *Xsig, const srukf_mat *Ysig,
                          const srukf_mat *x_mean, const srukf_mat *y_mean,
-                         const srukf_value *weights, srukf_mat *Pxz);
+                         const srukf_value *weights, srukf_mat *Pxz,
+                         srukf_mat *Xdev, srukf_mat *Ydev);
 
 /* SR-UKF specific functions */
 static srukf_return chol_downdate_rank1(srukf_mat *S, const srukf_value *v,
@@ -223,6 +277,15 @@ struct srukf_workspace {
   srukf_mat *Syy; /**< M x M - measurement sqrt-covariance (lower triangular) */
   /** @} */
 
+  /** @name Commit Staging
+   *  Results are computed here and copied to their destination only on
+   *  success, giving every predict/correct variant transactional
+   *  semantics. The cores never touch these buffers internally.
+   *  @{ */
+  srukf_mat *x_stage; /**< N x 1 - staged state output */
+  /** S staging reuses S_tmp (predict) and S_new (correct). */
+  /** @} */
+
   /** @name Small Buffers
    *  Avoid malloc in hot path
    *  @{ */
@@ -232,6 +295,15 @@ struct srukf_workspace {
       *downdate_work;  /**< Cholesky downdate scratch (max(N,M) elements) */
   srukf_value *dev0_N; /**< First deviation column for predict downdate */
   srukf_value *dev0_M; /**< First deviation column for correct downdate */
+  srukf_value *lapack_work; /**< LAPACK QR work buffer (lwork elements),
+                                 queried at allocation so GEQRF never
+                                 mallocs in the hot path */
+  int lwork;                /**< Size of lapack_work */
+  /** @} */
+
+  /** @name Innovation Bookkeeping
+   *  @{ */
+  bool correct_valid; /**< innov/Syy describe a completed correct step */
   /** @} */
 };
 
@@ -262,6 +334,7 @@ void srukf_free_workspace(srukf *ukf) {
   srukf_mat_free(ws->qr_work_N);
   srukf_mat_free(ws->qr_work_M);
   srukf_mat_free(ws->Syy);
+  srukf_mat_free(ws->x_stage);
 
   /* Free pre-allocated buffers */
   free(ws->tau_N);
@@ -269,6 +342,7 @@ void srukf_free_workspace(srukf *ukf) {
   free(ws->downdate_work);
   free(ws->dev0_N);
   free(ws->dev0_M);
+  free(ws->lapack_work);
 
   free(ws);
   ukf->ws = NULL;
@@ -324,6 +398,7 @@ srukf_return srukf_alloc_workspace(srukf *ukf) {
   ws->qr_work_N = SRUKF_MAT_ALLOC(n_sigma + N + 1, N);
   ws->qr_work_M = SRUKF_MAT_ALLOC(n_sigma + M + 1, M);
   ws->Syy = SRUKF_MAT_ALLOC(M, M);
+  ws->x_stage = SRUKF_MAT_ALLOC(N, 1);
 
   /* Pre-allocated buffers for hot path (avoid malloc in predict/correct) */
   ws->tau_N = (srukf_value *)calloc(N, sizeof(srukf_value));
@@ -337,9 +412,41 @@ srukf_return srukf_alloc_workspace(srukf *ukf) {
   if (!ws->Xsig || !ws->Ysig_N || !ws->x_pred || !ws->S_tmp || !ws->Ysig_M ||
       !ws->y_mean || !ws->Pxz || !ws->K || !ws->innov || !ws->x_new ||
       !ws->S_new || !ws->dx || !ws->tmp1 || !ws->Dev_N || !ws->Dev_M ||
-      !ws->qr_work_N || !ws->qr_work_M || !ws->Syy || !ws->tau_N ||
-      !ws->tau_M || !ws->downdate_work || !ws->dev0_N || !ws->dev0_M) {
+      !ws->qr_work_N || !ws->qr_work_M || !ws->Syy || !ws->x_stage ||
+      !ws->tau_N || !ws->tau_M || !ws->downdate_work || !ws->dev0_N ||
+      !ws->dev0_M) {
     ukf->ws = ws; /* Temporarily assign so free_workspace can clean up */
+    srukf_free_workspace(ukf);
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  }
+
+  /* Size the LAPACK QR work buffer once (lwork = -1 is a query), so the
+   * hot path can use the _work variant, which never mallocs. The
+   * requirement grows with the column count; take the max of both QR
+   * shapes used by predict and correct. */
+  srukf_value wq = 0;
+  int lw = 0;
+  int info = SRUKF_GEQRF(SRUKF_LAPACK_LAYOUT, (int)ws->qr_work_N->n_rows,
+                         (int)N, ws->qr_work_N->data,
+                         (int)SRUKF_LEADING_DIM(ws->qr_work_N), ws->tau_N,
+                         &wq, -1);
+  if (info == 0)
+    lw = (int)wq;
+  info = SRUKF_GEQRF(SRUKF_LAPACK_LAYOUT, (int)ws->qr_work_M->n_rows, (int)M,
+                     ws->qr_work_M->data,
+                     (int)SRUKF_LEADING_DIM(ws->qr_work_M), ws->tau_M, &wq,
+                     -1);
+  if (info == 0 && (int)wq > lw)
+    lw = (int)wq;
+  if (lw < 1) {
+    ukf->ws = ws;
+    srukf_free_workspace(ukf);
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  }
+  ws->lapack_work = (srukf_value *)calloc((size_t)lw, sizeof(srukf_value));
+  ws->lwork = lw;
+  if (!ws->lapack_work) {
+    ukf->ws = ws;
     srukf_free_workspace(ukf);
     return SRUKF_RETURN_PARAMETER_ERROR;
   }
@@ -449,32 +556,15 @@ static srukf_return alloc_vector(srukf_value **vec, srukf_index len) {
  * Adding (1 - alpha^2 + beta) may not compensate enough, leaving wc[0] < 0.
  * This is handled correctly in the QR-based covariance computation.
  *
- * @param ukf Filter with alpha/beta/kappa/lambda set
+ * @param ukf Filter with alpha/beta/kappa/lambda set and weight arrays
+ *            allocated (guaranteed by srukf_set_scale, the only caller)
  * @param n State dimension N
- * @return SRUKF_RETURN_OK on success
  */
-static srukf_return srukf_compute_weights(srukf *ukf, const srukf_index n) {
+static void srukf_compute_weights(srukf *ukf, const srukf_index n) {
   srukf_index n_sigma = 2 * n + 1;
 
-  /* Allocate weight vectors if needed */
-  if (!ukf->wm) {
-    if (alloc_vector(&ukf->wm, n_sigma) != SRUKF_RETURN_OK)
-      return SRUKF_RETURN_PARAMETER_ERROR;
-  }
-  if (!ukf->wc) {
-    if (alloc_vector(&ukf->wc, n_sigma) != SRUKF_RETURN_OK) {
-      free(ukf->wm);
-      ukf->wm = NULL;
-      return SRUKF_RETURN_PARAMETER_ERROR;
-    }
-  }
-
-  /* Common denominator for all weights */
+  /* Common denominator: n + λ = α²(n+κ), validated > 0 by set_scale */
   const srukf_value denom = (srukf_value)n + ukf->lambda;
-  if (fabs(denom) < SRUKF_EPS) { /* safeguard against division by zero */
-    diag_report("compute_weights: denominator too small (n + lambda ≈ 0)");
-    return SRUKF_RETURN_MATH_ERROR;
-  }
 
   /* Mean weights: wm[0] = λ / (n+λ), wm[i>0] = 1/(2(n+λ)) */
   for (srukf_index i = 0; i < n_sigma; ++i)
@@ -485,8 +575,6 @@ static srukf_return srukf_compute_weights(srukf *ukf, const srukf_index n) {
   for (srukf_index i = 0; i < n_sigma; ++i)
     ukf->wc[i] = ukf->wm[i];
   ukf->wc[0] += (1.0 - ukf->alpha * ukf->alpha + ukf->beta);
-
-  return SRUKF_RETURN_OK;
 }
 
 /** @} */ /* end impl_weights */
@@ -496,34 +584,45 @@ srukf_return srukf_set_scale(srukf *ukf, srukf_value alpha, srukf_value beta,
   if (!ukf || !ukf->x)
     return SRUKF_RETURN_PARAMETER_ERROR; /* filter or state not yet allocated */
 
+  /* NaN survives ordering comparisons, so reject non-finite inputs
+   * explicitly or they poison every weight downstream. */
+  if (!isfinite(alpha) || !isfinite(beta) || !isfinite(kappa))
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
   if (alpha <= 0.0)
     return SRUKF_RETURN_PARAMETER_ERROR; /* α must be positive */
 
-  /* ----------------- compute λ --------------------------------- */
   srukf_index n = ukf->x->n_rows; /* state dimension */
+
+  /* n + κ must be positive: γ = sqrt(α²(n+κ)) must be real, and the
+   * weight denominator n + λ = α²(n+κ) must be positive. */
+  if ((srukf_value)n + kappa <= 0.0)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
   srukf_value lambda =
       alpha * alpha * ((srukf_value)n + kappa) - (srukf_value)n;
 
-  /* --------- guard against λ ≈ –n ------------------------------ */
-  if (fabs((double)(n + lambda)) < SRUKF_EPS) {
-    /* Cannot recompute α if (n + κ) ≈ 0 (would divide by zero) */
-    if (fabs((double)n + kappa) < SRUKF_EPS)
-      return SRUKF_RETURN_PARAMETER_ERROR;
-    /* clamp λ to –n + ε */
-    lambda = -(srukf_value)n + SRUKF_EPS;
-    /* recompute α from the clamped λ  (λ = α²(n+κ) – n)  */
-    srukf_value a = sqrt((lambda + (srukf_value)n) / ((srukf_value)n + kappa));
-    return srukf_set_scale(ukf, a, beta, kappa);
-  } else {
-    /* --------- store the (possibly adjusted) parameters ------------- */
-    ukf->alpha = alpha;
-    ukf->beta = beta;
-    ukf->kappa = kappa;
-    ukf->lambda = lambda;
-
-    /* --------- recompute mean & covariance weights -------------- */
-    return srukf_compute_weights(ukf, n);
+  /* Mathematically positive, but reject underflow below the working
+   * precision: the weights are O(1/(n+λ)) and would be garbage. */
+  if ((srukf_value)n + lambda < SRUKF_EPS) {
+    diag_report(ukf, "set_scale: alpha^2 * (n + kappa) underflows precision");
+    return SRUKF_RETURN_MATH_ERROR;
   }
+
+  /* Ensure weight storage exists before committing any parameter, so a
+   * failed call never leaves parameters and weights out of sync. */
+  srukf_index n_sigma = 2 * n + 1;
+  if (!ukf->wm && alloc_vector(&ukf->wm, n_sigma) != SRUKF_RETURN_OK)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  if (!ukf->wc && alloc_vector(&ukf->wc, n_sigma) != SRUKF_RETURN_OK)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
+  ukf->alpha = alpha;
+  ukf->beta = beta;
+  ukf->kappa = kappa;
+  ukf->lambda = lambda;
+  srukf_compute_weights(ukf, n);
+  return SRUKF_RETURN_OK;
 }
 
 /* Free all memory allocated for the filter. */
@@ -569,6 +668,58 @@ srukf_index srukf_meas_dim(const srukf *ukf) {
   if (!ukf || !ukf->Rsqrt)
     return 0;
   return ukf->Rsqrt->n_rows;
+}
+
+/*-------------------- Innovation accessors ---------------------------*/
+
+/* The innovation and Syy live in the workspace; correct_valid gates
+ * access so callers can never read leftovers from an unrelated or
+ * failed step. */
+
+srukf_return srukf_get_innovation(const srukf *ukf, srukf_mat *innov_out) {
+  if (!ukf || !innov_out || !ukf->ws || !ukf->ws->correct_valid)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
+  srukf_index M = ukf->ws->M;
+  if (innov_out->n_rows != M || innov_out->n_cols != 1)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
+  memcpy(innov_out->data, ukf->ws->innov->data, M * sizeof(srukf_value));
+  return SRUKF_RETURN_OK;
+}
+
+srukf_return srukf_get_innovation_sqrt_cov(const srukf *ukf,
+                                           srukf_mat *Syy_out) {
+  if (!ukf || !Syy_out || !ukf->ws || !ukf->ws->correct_valid)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
+  srukf_index M = ukf->ws->M;
+  if (Syy_out->n_rows != M || Syy_out->n_cols != M)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
+  memcpy(Syy_out->data, ukf->ws->Syy->data, M * M * sizeof(srukf_value));
+  return SRUKF_RETURN_OK;
+}
+
+srukf_return srukf_get_nis(const srukf *ukf, srukf_value *nis_out) {
+  if (!ukf || !nis_out || !ukf->ws || !ukf->ws->correct_valid)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+
+  srukf_workspace *ws = ukf->ws;
+  srukf_index M = ws->M;
+
+  /* NIS = innov' * (Syy Syy')^{-1} * innov = ||Syy^{-1} innov||^2,
+   * one forward substitution against the lower-triangular Syy. */
+  memcpy(ws->downdate_work, ws->innov->data, M * sizeof(srukf_value));
+  SRUKF_TRSV(SRUKF_CBLAS_LAYOUT, CblasLower, CblasNoTrans, CblasNonUnit,
+             (int)M, ws->Syy->data, (int)SRUKF_LEADING_DIM(ws->Syy),
+             ws->downdate_work, 1);
+
+  srukf_value nis = 0.0;
+  for (srukf_index i = 0; i < M; ++i)
+    nis += ws->downdate_work[i] * ws->downdate_work[i];
+  *nis_out = nis;
+  return SRUKF_RETURN_OK;
 }
 
 /*-------------------- State accessors --------------------------------*/
@@ -625,7 +776,8 @@ srukf_return srukf_reset(srukf *ukf, srukf_value init_std) {
   if (!ukf || !ukf->x || !ukf->S)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
-  if (init_std <= 0.0)
+  /* NaN survives the <= comparison; reject non-finite explicitly */
+  if (!isfinite(init_std) || init_std <= 0.0)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
   srukf_index N = ukf->x->n_rows;
@@ -652,6 +804,11 @@ static srukf_return srukf_init(srukf *ukf, int N /* states */,
   if (!ukf)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
+  /* On any failure we return with whatever was allocated still attached
+   * to the (calloc'd) struct; the callers respond to failure with
+   * srukf_free(), which owns ALL cleanup. Freeing anything here would
+   * leave a dangling pointer behind for srukf_free to free again. */
+
   /* ----------------- State vector --------------------------------- */
   ukf->x = SRUKF_MAT_ALLOC(N, 1);
   if (!ukf->x)
@@ -660,10 +817,8 @@ static srukf_return srukf_init(srukf *ukf, int N /* states */,
 
   /* ----------------- State covariance square‑root ----------------- */
   ukf->S = SRUKF_MAT_ALLOC(N, N);
-  if (!ukf->S) {
-    srukf_mat_free(ukf->x);
+  if (!ukf->S)
     return SRUKF_RETURN_PARAMETER_ERROR;
-  }
   SRUKF_SET_TYPE(ukf->S, SRUKF_TYPE_SQUARE | SRUKF_TYPE_COL_MAJOR);
   /* initialize only the diagonal so that correction
    * can occur before prediction */
@@ -672,36 +827,25 @@ static srukf_return srukf_init(srukf *ukf, int N /* states */,
       SRUKF_ENTRY(ukf->S, i, j) = (i == j) ? 0.001 : 0.0;
 
   /* ---------- Process‑noise ---------- */
-  if (Qsqrt_src) {
-    ukf->Qsqrt = SRUKF_MAT_ALLOC(N, N);
+  ukf->Qsqrt =
+      Qsqrt_src ? SRUKF_MAT_ALLOC(N, N) : SRUKF_MAT_ALLOC_NO_DATA(N, N);
+  if (!ukf->Qsqrt)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  if (Qsqrt_src)
     for (srukf_index j = 0; j < (srukf_index)N; ++j)
       for (srukf_index i = 0; i < (srukf_index)N; ++i)
         SRUKF_ENTRY(ukf->Qsqrt, i, j) = SRUKF_ENTRY(Qsqrt_src, i, j);
-  } else {
-    ukf->Qsqrt = SRUKF_MAT_ALLOC_NO_DATA(N, N);
-  }
-  if (!ukf->Qsqrt) {
-    srukf_mat_free(ukf->x);
-    srukf_mat_free(ukf->S);
-    return SRUKF_RETURN_PARAMETER_ERROR;
-  }
   SRUKF_SET_TYPE(ukf->Qsqrt, SRUKF_TYPE_SQUARE | SRUKF_TYPE_COL_MAJOR);
 
   /* ---------- Measurement‑noise ---------- */
-  if (Rsqrt_src) {
-    ukf->Rsqrt = SRUKF_MAT_ALLOC(M, M);
+  ukf->Rsqrt =
+      Rsqrt_src ? SRUKF_MAT_ALLOC(M, M) : SRUKF_MAT_ALLOC_NO_DATA(M, M);
+  if (!ukf->Rsqrt)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  if (Rsqrt_src)
     for (srukf_index j = 0; j < (srukf_index)M; ++j)
       for (srukf_index i = 0; i < (srukf_index)M; ++i)
         SRUKF_ENTRY(ukf->Rsqrt, i, j) = SRUKF_ENTRY(Rsqrt_src, i, j);
-  } else {
-    ukf->Rsqrt = SRUKF_MAT_ALLOC_NO_DATA(M, M);
-  }
-  if (!ukf->Rsqrt) {
-    srukf_mat_free(ukf->x);
-    srukf_mat_free(ukf->S);
-    srukf_mat_free(ukf->Qsqrt);
-    return SRUKF_RETURN_PARAMETER_ERROR;
-  }
   SRUKF_SET_TYPE(ukf->Rsqrt, SRUKF_TYPE_SQUARE | SRUKF_TYPE_COL_MAJOR);
 
   /* ----------------- Default scaling -------------------------------- */
@@ -873,12 +1017,14 @@ static srukf_return generate_sigma_points_from(const srukf_mat *x,
   if (S->n_rows != n || S->n_cols != n)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
-  /* scaling factor γ = sqrt( N + λ ) */
-  srukf_value gamma = sqrt((srukf_value)n + lambda);
-  if (gamma <= 0.0) {
-    diag_report("generate_sigma_points: gamma <= 0 (N + lambda <= 0)");
+  /* scaling factor γ = sqrt( N + λ ); test positivity BEFORE the sqrt:
+   * a NaN gamma would sail through a `gamma <= 0` comparison */
+  srukf_value t = (srukf_value)n + lambda;
+  if (!(t > 0.0)) {
+    diag_report(NULL, "generate_sigma_points: N + lambda <= 0 or NaN");
     return SRUKF_RETURN_MATH_ERROR;
   }
+  srukf_value gamma = SRUKF_SQRT(t);
 
   /* 1st column = mean state */
   for (srukf_index i = 0; i < n; ++i)
@@ -933,10 +1079,9 @@ static inline void srukf_mat_column_view(srukf_mat *V, const srukf_mat *M,
  * @param user User data passed to func
  * @return SRUKF_RETURN_OK on success
  */
-static srukf_return
-propagate_sigma_points(const srukf_mat *Xsig, srukf_mat *Ysig,
-                       void (*func)(const srukf_mat *, srukf_mat *, void *),
-                       void *user) {
+static srukf_return propagate_sigma_points(const srukf_mat *Xsig,
+                                            srukf_mat *Ysig,
+                                            srukf_model_fn func, void *user) {
   /* Basic sanity checks */
   if (!Xsig || !func || !Ysig)
     return SRUKF_RETURN_PARAMETER_ERROR;
@@ -1034,11 +1179,11 @@ static srukf_return chol_downdate_rank1(srukf_mat *S, const srukf_value *v,
       /* Matrix would become non-SPD */
       return SRUKF_RETURN_MATH_ERROR;
     }
-    srukf_value r = sqrt(r2);
+    srukf_value r = SRUKF_SQRT(r2);
 
-    if (fabs(Sjj) < SRUKF_EPS) {
+    if (SRUKF_FABS(Sjj) < SRUKF_EPS) {
       /* Skip if diagonal is essentially zero */
-      if (fabs(wj) > SRUKF_EPS) {
+      if (SRUKF_FABS(wj) > SRUKF_EPS) {
         return SRUKF_RETURN_MATH_ERROR;
       }
       continue;
@@ -1110,7 +1255,7 @@ static srukf_return compute_weighted_deviations(const srukf_mat *Ysig,
     return SRUKF_RETURN_PARAMETER_ERROR;
 
   for (srukf_index k = 0; k < n_sigma; ++k) {
-    srukf_value sw = sqrt(fabs(wc[k]));
+    srukf_value sw = SRUKF_SQRT(SRUKF_FABS(wc[k]));
     for (srukf_index i = 0; i < M; ++i) {
       SRUKF_ENTRY(Dev, i, k) =
           sw * (SRUKF_ENTRY(Ysig, i, k) - SRUKF_ENTRY(mean, i, 0));
@@ -1159,6 +1304,8 @@ static srukf_return compute_weighted_deviations(const srukf_mat *Ysig,
  * @param work QR workspace matrix ((2N+1+dim) x dim)
  * @param tau QR householder scalars (dim elements)
  * @param downdate_work Scratch for downdate (dim elements)
+ * @param lapack_work LAPACK QR scratch (lwork elements)
+ * @param lwork Size of lapack_work (from the workspace-sizing query)
  * @param wc0_negative True if wc[0] < 0 (requires downdate)
  * @param dev0 First deviation column (for downdate, NULL if wc0 >= 0)
  * @return SRUKF_RETURN_OK on success
@@ -1166,9 +1313,10 @@ static srukf_return compute_weighted_deviations(const srukf_mat *Ysig,
 static srukf_return
 srukf_sqrt_from_deviations_ex(const srukf_mat *Dev, const srukf_mat *Noise_sqrt,
                               srukf_mat *S, srukf_mat *work, srukf_value *tau,
-                              srukf_value *downdate_work, bool wc0_negative,
-                              const srukf_value *dev0) {
-  if (!Dev || !Noise_sqrt || !S || !work || !tau)
+                              srukf_value *downdate_work,
+                              srukf_value *lapack_work, int lwork,
+                              bool wc0_negative, const srukf_value *dev0) {
+  if (!Dev || !Noise_sqrt || !S || !work || !tau || !lapack_work)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
   srukf_index dim = Dev->n_rows;     /* dimension of output S */
@@ -1209,11 +1357,12 @@ srukf_sqrt_from_deviations_ex(const srukf_mat *Dev, const srukf_mat *Noise_sqrt,
     }
   }
 
-  /* QR factorization to get R (using pre-allocated tau buffer) */
+  /* QR factorization to get R. The _work variant uses the caller's
+   * scratch buffer, so no heap allocation happens here. */
   int info = SRUKF_GEQRF(SRUKF_LAPACK_LAYOUT, (int)n_rows, (int)dim, work->data,
-                         (int)SRUKF_LEADING_DIM(work), tau);
+                         (int)SRUKF_LEADING_DIM(work), tau, lapack_work, lwork);
   if (info != 0) {
-    diag_report("QR factorization (SRUKF_GEQRF) failed");
+    diag_report(NULL, "QR factorization (SRUKF_GEQRF) failed");
     return SRUKF_RETURN_MATH_ERROR;
   }
 
@@ -1279,14 +1428,10 @@ static srukf_return compute_weighted_mean(const srukf_mat *Ysig,
   if (mean->n_rows != M || mean->n_cols != 1)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
-  for (srukf_index i = 0; i < M; ++i)
-    SRUKF_ENTRY(mean, i, 0) = 0.0;
-
-  for (srukf_index k = 0; k < n_sigma; ++k) {
-    srukf_value wk = wm[k];
-    for (srukf_index i = 0; i < M; ++i)
-      SRUKF_ENTRY(mean, i, 0) += wk * SRUKF_ENTRY(Ysig, i, k);
-  }
+  /* mean = Ysig * wm: one GEMV instead of a scalar accumulation loop */
+  SRUKF_GEMV(SRUKF_CBLAS_LAYOUT, CblasNoTrans, (int)M, (int)n_sigma,
+             (srukf_value)1.0, Ysig->data, (int)SRUKF_LEADING_DIM(Ysig), wm, 1,
+             (srukf_value)0.0, mean->data, 1);
 
   return SRUKF_RETURN_OK;
 }
@@ -1318,37 +1463,53 @@ static srukf_return compute_weighted_mean(const srukf_mat *Ysig,
  * @param y_mean Measurement mean (M x 1)
  * @param weights Covariance weights wc ((2N+1) elements)
  * @param Pxz Output cross-covariance (N x M)
+ * @param Xdev Scratch for weighted state deviations (N x (2N+1)),
+ *             contents destroyed
+ * @param Ydev Scratch for measurement deviations (M x (2N+1)),
+ *             contents destroyed
  * @return SRUKF_RETURN_OK on success
  */
 static srukf_return
 compute_cross_covariance(const srukf_mat *Xsig, const srukf_mat *Ysig,
                          const srukf_mat *x_mean, const srukf_mat *y_mean,
-                         const srukf_value *weights, srukf_mat *Pxz) {
+                         const srukf_value *weights, srukf_mat *Pxz,
+                         srukf_mat *Xdev, srukf_mat *Ydev) {
   if (!Xsig || !Ysig || !x_mean || !y_mean || !weights || !Pxz)
     return SRUKF_RETURN_PARAMETER_ERROR;
-
-  if (Xsig->n_rows != Pxz->n_rows || Ysig->n_rows != Pxz->n_cols)
+  if (!Xdev || !Ydev)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
-  if (Xsig->n_cols != Ysig->n_cols)
+  srukf_index N = Xsig->n_rows;
+  srukf_index M = Ysig->n_rows;
+  srukf_index K = Xsig->n_cols;
+
+  if (N != Pxz->n_rows || M != Pxz->n_cols)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  if (K != Ysig->n_cols)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  if (Xdev->n_rows != N || Xdev->n_cols < K)
+    return SRUKF_RETURN_PARAMETER_ERROR;
+  if (Ydev->n_rows != M || Ydev->n_cols < K)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
-  /* zero‑initialize */
-  for (srukf_index i = 0; i < Pxz->n_rows; ++i)
-    for (srukf_index j = 0; j < Pxz->n_cols; ++j)
-      SRUKF_ENTRY(Pxz, i, j) = 0.0;
-
-  /* weighted outer products */
-  for (srukf_index k = 0; k < Xsig->n_cols; ++k) {
+  /* Fold the weights into the state deviations, keep the measurement
+   * deviations plain, then Pxz = Xdev * Ydev' is a single GEMM. */
+  for (srukf_index k = 0; k < K; ++k) {
     srukf_value wk = weights[k];
-    for (srukf_index i = 0; i < Xsig->n_rows; ++i) {
-      srukf_value xi = SRUKF_ENTRY(Xsig, i, k) - SRUKF_ENTRY(x_mean, i, 0);
-      for (srukf_index j = 0; j < Ysig->n_rows; ++j) {
-        srukf_value yj = SRUKF_ENTRY(Ysig, j, k) - SRUKF_ENTRY(y_mean, j, 0);
-        SRUKF_ENTRY(Pxz, i, j) += wk * xi * yj;
-      }
-    }
+    for (srukf_index i = 0; i < N; ++i)
+      SRUKF_ENTRY(Xdev, i, k) =
+          wk * (SRUKF_ENTRY(Xsig, i, k) - SRUKF_ENTRY(x_mean, i, 0));
+    for (srukf_index j = 0; j < M; ++j)
+      SRUKF_ENTRY(Ydev, j, k) =
+          SRUKF_ENTRY(Ysig, j, k) - SRUKF_ENTRY(y_mean, j, 0);
   }
+
+  SRUKF_GEMM(SRUKF_CBLAS_LAYOUT, CblasNoTrans, CblasTrans, (int)N, (int)M,
+             (int)K, (srukf_value)1.0, Xdev->data,
+             (int)SRUKF_LEADING_DIM(Xdev), Ydev->data,
+             (int)SRUKF_LEADING_DIM(Ydev), (srukf_value)0.0, Pxz->data,
+             (int)SRUKF_LEADING_DIM(Pxz));
+
   return SRUKF_RETURN_OK;
 }
 
@@ -1403,13 +1564,14 @@ compute_cross_covariance(const srukf_mat *Xsig, const srukf_mat *Ysig,
  */
 static srukf_return
 srukf_predict_core(const srukf *ukf, const srukf_mat *x_in,
-                   const srukf_mat *S_in,
-                   void (*f)(const srukf_mat *, srukf_mat *, void *),
-                   void *user, srukf_mat *x_out, srukf_mat *S_out) {
+                   const srukf_mat *S_in, srukf_model_fn f, void *user,
+                   srukf_mat *x_out, srukf_mat *S_out) {
   srukf_return ret = SRUKF_RETURN_OK;
   if (!ukf || !f || !x_in || !S_in || !x_out || !S_out)
     return SRUKF_RETURN_PARAMETER_ERROR;
-  if (!ukf->Qsqrt || !ukf->wm || !ukf->wc || !ukf->ws)
+  /* Qsqrt->data is NULL until srukf_set_noise() supplies real values
+   * (srukf_create allocates the struct without a data buffer) */
+  if (!ukf->Qsqrt || !ukf->Qsqrt->data || !ukf->wm || !ukf->wc || !ukf->ws)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
   /* --- Dimensions --------------------------------------------------- */
@@ -1432,33 +1594,33 @@ srukf_predict_core(const srukf *ukf, const srukf_mat *x_in,
   /* --- Generate and propagate sigma points ------------------------ */
   ret = generate_sigma_points_from(x_in, S_in, ukf->lambda, Xsig);
   if (ret != SRUKF_RETURN_OK) {
-    diag_report("predict: sigma point generation failed");
+    diag_report(ukf, "predict: sigma point generation failed");
     return ret;
   }
 
   ret = propagate_sigma_points(Xsig, Ysig, f, user);
   if (ret != SRUKF_RETURN_OK) {
-    diag_report("predict: sigma point propagation failed");
+    diag_report(ukf, "predict: sigma point propagation failed");
     return ret;
   }
 
   /* --- Validate callback output ----------------------------------- */
   if (!is_numeric_valid(Ysig)) {
-    diag_report("predict: callback f produced NaN or Inf");
+    diag_report(ukf, "predict: callback f produced NaN or Inf");
     return SRUKF_RETURN_MATH_ERROR;
   }
 
   /* --- Compute weighted mean --------------------------------------- */
   ret = compute_weighted_mean(Ysig, ukf->wm, x_mean);
   if (ret != SRUKF_RETURN_OK) {
-    diag_report("predict: compute_weighted_mean failed");
+    diag_report(ukf, "predict: compute_weighted_mean failed");
     return ret;
   }
 
   /* --- Compute weighted deviations --------------------------------- */
   ret = compute_weighted_deviations(Ysig, x_mean, ukf->wc, Dev);
   if (ret != SRUKF_RETURN_OK) {
-    diag_report("predict: compute_weighted_deviations failed");
+    diag_report(ukf, "predict: compute_weighted_deviations failed");
     return ret;
   }
 
@@ -1473,11 +1635,12 @@ srukf_predict_core(const srukf *ukf, const srukf_mat *x_in,
       dev0[i] = SRUKF_ENTRY(Dev, i, 0);
   }
 
-  ret =
-      srukf_sqrt_from_deviations_ex(Dev, ukf->Qsqrt, S_out, qr_work, ws->tau_N,
-                                    ws->downdate_work, wc0_negative, dev0);
+  ret = srukf_sqrt_from_deviations_ex(Dev, ukf->Qsqrt, S_out, qr_work,
+                                      ws->tau_N, ws->downdate_work,
+                                      ws->lapack_work, ws->lwork,
+                                      wc0_negative, dev0);
   if (ret != SRUKF_RETURN_OK) {
-    diag_report("predict: sqrt_from_deviations (QR/downdate) failed");
+    diag_report(ukf, "predict: sqrt_from_deviations (QR/downdate) failed");
     return ret;
   }
 
@@ -1490,8 +1653,7 @@ srukf_predict_core(const srukf *ukf, const srukf_mat *x_in,
 /** @} */ /* end impl_predict */
 
 srukf_return srukf_predict_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
-                              void (*f)(const srukf_mat *, srukf_mat *, void *),
-                              void *user) {
+                              srukf_model_fn f, void *user) {
   if (!ukf || !x || !S)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
@@ -1509,12 +1671,19 @@ srukf_return srukf_predict_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
   if (ret != SRUKF_RETURN_OK)
     return ret;
 
-  return srukf_predict_core(ukf, x, S, f, user, x, S);
+  /* Stage in the workspace, commit only on success: the caller's
+   * buffers are never left half-updated by a mid-step failure. */
+  srukf_mat *x_stage = ukf->ws->x_stage;
+  srukf_mat *S_stage = ukf->ws->S_tmp;
+  ret = srukf_predict_core(ukf, x, S, f, user, x_stage, S_stage);
+  if (ret == SRUKF_RETURN_OK) {
+    memcpy(x->data, x_stage->data, N * sizeof(srukf_value));
+    memcpy(S->data, S_stage->data, N * N * sizeof(srukf_value));
+  }
+  return ret;
 }
 
-srukf_return srukf_predict(srukf *ukf,
-                           void (*f)(const srukf_mat *, srukf_mat *, void *),
-                           void *user) {
+srukf_return srukf_predict(srukf *ukf, srukf_model_fn f, void *user) {
   if (!ukf || !ukf->x || !ukf->S)
     return SRUKF_RETURN_PARAMETER_ERROR;
 
@@ -1525,19 +1694,15 @@ srukf_return srukf_predict(srukf *ukf,
 
   srukf_index N = ukf->x->n_rows;
 
-  /* Use workspace for output temporaries */
-  srukf_mat *x_out = ukf->ws->x_pred;
-  srukf_mat *S_out = ukf->ws->S_tmp;
-
-  /* Run core: read from ukf->x/S, write to temps */
-  ret = srukf_predict_core(ukf, ukf->x, ukf->S, f, user, x_out, S_out);
-
-  /* Commit on success */
+  /* Stage in the workspace, commit only on success. x_stage/S_tmp are
+   * dedicated staging buffers the core never touches internally. */
+  srukf_mat *x_stage = ukf->ws->x_stage;
+  srukf_mat *S_stage = ukf->ws->S_tmp;
+  ret = srukf_predict_core(ukf, ukf->x, ukf->S, f, user, x_stage, S_stage);
   if (ret == SRUKF_RETURN_OK) {
-    memcpy(ukf->x->data, x_out->data, N * sizeof(srukf_value));
-    memcpy(ukf->S->data, S_out->data, N * N * sizeof(srukf_value));
+    memcpy(ukf->x->data, x_stage->data, N * sizeof(srukf_value));
+    memcpy(ukf->S->data, S_stage->data, N * N * sizeof(srukf_value));
   }
-
   return ret;
 }
 
@@ -1616,14 +1781,19 @@ srukf_return srukf_predict(srukf *ukf,
  */
 static srukf_return
 srukf_correct_core(const srukf *ukf, const srukf_mat *x_in,
-                   const srukf_mat *S_in, srukf_mat *z,
-                   void (*h)(const srukf_mat *, srukf_mat *, void *),
-                   void *user, srukf_mat *x_out, srukf_mat *S_out) {
+                   const srukf_mat *S_in, const srukf_mat *z,
+                   srukf_model_fn h, void *user, srukf_mat *x_out,
+                   srukf_mat *S_out) {
   srukf_return ret = SRUKF_RETURN_OK;
   if (!ukf || !h || !z || !x_in || !S_in || !x_out || !S_out)
     return SRUKF_RETURN_PARAMETER_ERROR;
-  if (!ukf->Rsqrt || !ukf->wm || !ukf->wc || !ukf->ws)
+  /* Rsqrt->data is NULL until srukf_set_noise() supplies real values */
+  if (!ukf->Rsqrt || !ukf->Rsqrt->data || !ukf->wm || !ukf->wc || !ukf->ws)
     return SRUKF_RETURN_PARAMETER_ERROR;
+
+  /* Whatever innovation the workspace holds is about to be overwritten;
+   * it becomes readable again only if this step completes. */
+  ukf->ws->correct_valid = false;
 
   srukf_index N = x_in->n_rows;       /* state dimension */
   srukf_index M = ukf->Rsqrt->n_rows; /* measurement dimension */
@@ -1661,7 +1831,7 @@ srukf_correct_core(const srukf *ukf, const srukf_mat *x_in,
 
   /* --- Validate callback output ----------------------------------- */
   if (!is_numeric_valid(Ysig)) {
-    diag_report("correct: callback h produced NaN or Inf");
+    diag_report(ukf, "correct: callback h produced NaN or Inf");
     return SRUKF_RETURN_MATH_ERROR;
   }
 
@@ -1691,6 +1861,7 @@ srukf_correct_core(const srukf *ukf, const srukf_mat *x_in,
 
   ret = srukf_sqrt_from_deviations_ex(Dev_M, ukf->Rsqrt, Syy, qr_work,
                                       ws->tau_M, ws->downdate_work,
+                                      ws->lapack_work, ws->lwork,
                                       wc0_negative, dev0_M_buf);
   if (ret != SRUKF_RETURN_OK)
     return ret;
@@ -1698,16 +1869,21 @@ srukf_correct_core(const srukf *ukf, const srukf_mat *x_in,
   /* --- Check if Syy is essentially zero ----------------------------- */
   bool Syy_zero = true;
   for (srukf_index i = 0; i < M && Syy_zero; ++i)
-    if (fabs(SRUKF_ENTRY(Syy, i, i)) > SRUKF_EPS)
+    if (SRUKF_FABS(SRUKF_ENTRY(Syy, i, i)) > SRUKF_EPS)
       Syy_zero = false;
   if (Syy_zero) {
+    /* Degenerate: no usable measurement information. Pass the prior
+     * through unchanged; the innovation stays unavailable. */
     memcpy(x_out->data, x_in->data, N * sizeof(srukf_value));
     memcpy(S_out->data, S_in->data, N * N * sizeof(srukf_value));
     return SRUKF_RETURN_OK;
   }
 
   /* 6. Cross‑covariance between state & measurement σ‑points -------- */
-  ret = compute_cross_covariance(Xsig, Ysig, x_mean, y_mean, ukf->wc, Pxz);
+  /* Dev_N is predict-only and Dev_M is done serving the Syy QR above,
+   * so both are free to serve as GEMM scratch here. */
+  ret = compute_cross_covariance(Xsig, Ysig, x_mean, y_mean, ukf->wc, Pxz,
+                                 ws->Dev_N, Dev_M);
   if (ret != SRUKF_RETURN_OK)
     return ret;
 
@@ -1774,7 +1950,7 @@ srukf_correct_core(const srukf *ukf, const srukf_mat *x_in,
     /* Perform rank-1 downdate */
     ret = chol_downdate_rank1(S_out, u_col, ws->downdate_work);
     if (ret != SRUKF_RETURN_OK) {
-      diag_report("correct: Cholesky downdate failed, matrix not SPD");
+      diag_report(ukf, "correct: Cholesky downdate failed, matrix not SPD");
       return ret;
     }
   }
@@ -1782,14 +1958,17 @@ srukf_correct_core(const srukf *ukf, const srukf_mat *x_in,
   /* 11. Write state output --------------------------------------------- */
   memcpy(x_out->data, x_new->data, N * sizeof(srukf_value));
 
+  /* The measurement was incorporated: innov and Syy in the workspace
+   * now describe this step and may be read via the accessors. */
+  ukf->ws->correct_valid = true;
+
   return SRUKF_RETURN_OK;
 }
 
 /** @} */ /* end impl_correct */
 
 srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
-                              srukf_mat *z,
-                              void (*h)(const srukf_mat *, srukf_mat *, void *),
+                              const srukf_mat *z, srukf_model_fn h,
                               void *user) {
   if (!ukf || !x || !S || !z)
     return SRUKF_RETURN_PARAMETER_ERROR;
@@ -1811,11 +1990,19 @@ srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
   if (ret != SRUKF_RETURN_OK)
     return ret;
 
-  return srukf_correct_core(ukf, x, S, z, h, user, x, S);
+  /* Stage in the workspace, commit only on success: the caller's
+   * buffers survive even a failure deep in the downdate loop. */
+  srukf_mat *x_stage = ukf->ws->x_stage;
+  srukf_mat *S_stage = ukf->ws->S_new;
+  ret = srukf_correct_core(ukf, x, S, z, h, user, x_stage, S_stage);
+  if (ret == SRUKF_RETURN_OK) {
+    memcpy(x->data, x_stage->data, N * sizeof(srukf_value));
+    memcpy(S->data, S_stage->data, N * N * sizeof(srukf_value));
+  }
+  return ret;
 }
 
-srukf_return srukf_correct(srukf *ukf, srukf_mat *z,
-                           void (*h)(const srukf_mat *, srukf_mat *, void *),
+srukf_return srukf_correct(srukf *ukf, const srukf_mat *z, srukf_model_fn h,
                            void *user) {
   if (!ukf || !ukf->x || !ukf->S)
     return SRUKF_RETURN_PARAMETER_ERROR;
@@ -1827,18 +2014,14 @@ srukf_return srukf_correct(srukf *ukf, srukf_mat *z,
 
   srukf_index N = ukf->x->n_rows;
 
-  /* Use workspace for output temporaries */
-  srukf_mat *x_out = ukf->ws->x_new;
-  srukf_mat *S_out = ukf->ws->S_new;
-
-  /* Run core: read from ukf->x/S, write to temps */
-  ret = srukf_correct_core(ukf, ukf->x, ukf->S, z, h, user, x_out, S_out);
-
-  /* Commit on success */
+  /* Stage in the workspace, commit only on success. x_stage/S_new are
+   * dedicated staging buffers the core never touches internally. */
+  srukf_mat *x_stage = ukf->ws->x_stage;
+  srukf_mat *S_stage = ukf->ws->S_new;
+  ret = srukf_correct_core(ukf, ukf->x, ukf->S, z, h, user, x_stage, S_stage);
   if (ret == SRUKF_RETURN_OK) {
-    memcpy(ukf->x->data, x_out->data, N * sizeof(srukf_value));
-    memcpy(ukf->S->data, S_out->data, N * N * sizeof(srukf_value));
+    memcpy(ukf->x->data, x_stage->data, N * sizeof(srukf_value));
+    memcpy(ukf->S->data, S_stage->data, N * N * sizeof(srukf_value));
   }
-
   return ret;
 }

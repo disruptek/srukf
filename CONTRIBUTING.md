@@ -31,10 +31,51 @@ brew install openblas lapack clang-format python numpy
 git clone https://github.com/disruptek/srukf.git
 cd srukf
 make          # builds library and runs tests
-make lib      # builds libsrukf.so only
+make lib      # builds libsrukf.so and libsrukf.a
 make test     # runs the test suite
 make bench    # runs benchmarks
 ```
+
+### The Two Build Systems
+
+The project ships **two first-class build systems** serving different
+audiences:
+
+- **make** is the minimal path: it needs only a C compiler, binutils,
+  and BLAS/LAPACKE. It builds, tests, and drives the sanitizer and
+  coverage workflows. Users on stripped-down systems build with make
+  alone — it must never grow a dependency on CMake.
+- **CMake** is the integration surface: it provides `find_package(srukf)`
+  exports, build options, and feeds the vcpkg/Conan packaging.
+
+Neither wraps the other, and CI builds and tests both (including a job
+that fails if the two systems disagree on the number of tests). To keep
+them from drifting, **build knowledge lives in the source tree, not in
+the build files**:
+
+- Test classification is derived, not listed. A test that compiles the
+  library internally does `#include "srukf.c"`; both build systems
+  detect that include and compile it standalone. All other `tests/*.c`
+  files link against the library. **Adding a test requires no
+  build-system edits** — drop the file in `tests/` and follow the
+  convention. (The one exception: `90_cpp_linkage.cpp` is registered
+  explicitly in both systems because C++ availability is optional.)
+- A test needing single precision defines `SRUKF_SINGLE` itself before
+  including `srukf.c` (see `tests/47_single_precision.c`); there are no
+  per-test compiler flags in the build files.
+- The version number lives in `srukf.h` (`SRUKF_VERSION_*`); CMake and
+  make both parse it from there. Do not version the C library anywhere
+  else. (The Python package carries its own `version.py`.)
+- Dependencies resolve through pkg-config in both systems with the same
+  cblas → blas → openblas fallback chain; the Makefile keeps a static
+  fallback and `LDFLAGS`/`CFLAGS` remain overridable for systems
+  without pkg-config.
+
+The invariant: **anything that changes what gets compiled must be
+expressible as a file-level convention, never as a parallel edit to both
+build files.** If you find yourself editing the Makefile and
+CMakeLists.txt in the same commit, look for the convention you're
+missing.
 
 ### Python Bindings
 
@@ -74,9 +115,12 @@ All changes must pass the existing test suite. The tests cover:
 | `30_errors.c` | Error handling and edge cases |
 | `35_numerical.c` | Numerical stability |
 | `40_stress.c` | Long-duration stress tests |
-| `45_accessors.c` | Safe state/covariance access |
+| `45_accessors.c` | Safe state/covariance access, version, innovation/NIS |
 | `46_edge_cases.c` | Boundary conditions |
 | `47_single_precision.c` | Single-precision (`float`) mode |
+| `48_atomicity.c` | Transactional semantics of predict/correct on error |
+| `49_zeroalloc.c` | Zero heap allocation in the steady-state hot path |
+| `90_cpp_linkage.cpp` | Public header consumable from C++ |
 
 **Run all tests:**
 

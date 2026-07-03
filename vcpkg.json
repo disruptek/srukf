@@ -1,6 +1,6 @@
 {
   "name": "srukf",
-  "version-string": "1.0.0",
+  "version-string": "1.1.0",
   "description": "Square-Root Unscented Kalman Filter - numerically stable state estimation for nonlinear systems",
   "homepage": "https://github.com/disruptek/srukf",
   "license": "MIT",
