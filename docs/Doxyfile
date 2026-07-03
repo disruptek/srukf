@@ -12,7 +12,7 @@ OUTPUT_DIRECTORY       = docs/doxygen
 #---------------------------------------------------------------------------
 # Input settings
 #---------------------------------------------------------------------------
-INPUT                  = srukf.h srukf.c
+INPUT                  = srukf.h srukf.c src
 FILE_PATTERNS          = *.h *.c
 RECURSIVE              = NO
 

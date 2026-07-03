@@ -89,7 +89,7 @@ int main(void) {
   /* ---- 4. Verify sigma‑point generation */
   srukf_index n_sigma = 2 * N + 1;               /* 15 */
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(N, n_sigma); /* N rows, 2N+1 columns */
-  rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, Xsig);
+  rc = generate_sigma_points_from(ukf, ukf->x, ukf->S, Xsig);
   if (rc != SRUKF_RETURN_OK) {
     fprintf(stderr, "Sigma‑point generation failed: %d\n", rc);
     srukf_free(ukf);

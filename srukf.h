@@ -124,11 +124,11 @@
  *
  * The UKF has three tuning parameters (\f$\alpha, \beta, \kappa\f$):
  *
- * | Parameter    | Typical Value | Effect                                                        |
- * |--------------|---------------|---------------------------------------------------------------|
- * | \f$\alpha\f$ | 0.001 - 1     | Controls sigma point spread. Smaller = tighter around mean    |
- * | \f$\beta\f$  | 2.0           | Prior knowledge of distribution. 2.0 is optimal for Gaussian  |
- * | \f$\kappa\f$ | 0 or 3-N      | Secondary scaling. Often chosen so \f$N + \kappa = 3\f$; must satisfy \f$N + \kappa > 0\f$ |
+ * | Parameter    | Typical   | Effect                                     |
+ * |--------------|-----------|--------------------------------------------|
+ * | \f$\alpha\f$ | 1e-3 to 1 | Sigma point spread; smaller = tighter      |
+ * | \f$\beta\f$  | 2.0       | Distribution prior; 2 optimal for Gaussian |
+ * | \f$\kappa\f$ | 0 or 3-N  | Secondary scaling; N + kappa must be > 0   |
  *
  * The derived parameter \f$\lambda = \alpha^2(N + \kappa) - N\f$ determines
  * the actual spread. For small \f$\alpha\f$, \f$\lambda \approx -N\f$, which
@@ -206,13 +206,13 @@ extern "C" {
  *============================================================================*/
 
 /** @brief Major version: incremented on incompatible API changes */
-#define SRUKF_VERSION_MAJOR 1
+#define SRUKF_VERSION_MAJOR 2
 /** @brief Minor version: incremented on backward-compatible additions */
-#define SRUKF_VERSION_MINOR 1
+#define SRUKF_VERSION_MINOR 0
 /** @brief Patch version: incremented on backward-compatible fixes */
 #define SRUKF_VERSION_PATCH 0
 /** @brief Version string "major.minor.patch" */
-#define SRUKF_VERSION "1.1.0"
+#define SRUKF_VERSION "2.0.0"
 
 /**
  * @brief Runtime version of the linked library
@@ -267,7 +267,8 @@ typedef enum {
   SRUKF_RETURN_OK = 0,          /**< Success */
   SRUKF_RETURN_PARAMETER_ERROR, /**< Invalid parameter (NULL, wrong dims, etc.)
                                  */
-  SRUKF_RETURN_MATH_ERROR       /**< Numerical failure (non-SPD matrix, etc.) */
+  SRUKF_RETURN_MATH_ERROR,      /**< Numerical failure (non-SPD matrix, etc.) */
+  SRUKF_RETURN_MEMORY_ERROR     /**< Allocation failure (out of memory) */
 } srukf_return;
 
 /**
@@ -342,10 +343,11 @@ typedef struct {
  * Creates a new matrix with the specified dimensions. Memory is
  * zero-initialized.
  *
- * @param rows Number of rows
- * @param cols Number of columns
+ * @param rows Number of rows (must be > 0)
+ * @param cols Number of columns (must be > 0)
  * @param alloc_data If non-zero, allocate data buffer; otherwise data is NULL
- * @return Allocated matrix, or NULL on failure
+ * @return Allocated matrix, or NULL on failure -- including zero
+ *         dimensions and rows * cols overflowing size_t
  *
  * @note Use srukf_mat_free() to release memory when done.
  */
@@ -382,79 +384,24 @@ void srukf_mat_free(srukf_mat *mat);
 typedef struct srukf_workspace srukf_workspace;
 
 /**
- * @brief Square-Root Unscented Kalman Filter
+ * @brief Square-Root Unscented Kalman Filter (opaque)
  *
- * This structure holds the complete state of an SR-UKF instance:
- * - Current state estimate and its sqrt-covariance
- * - Noise covariances (as square-roots)
- * - UKF tuning parameters and derived weights
- * - Pre-allocated workspace for efficiency
+ * Holds the complete state of an SR-UKF instance: the state estimate and
+ * its sqrt-covariance, the noise sqrt-covariances, the UKF tuning
+ * parameters with their derived weights, and a pre-allocated workspace.
  *
- * **Key insight:** We store \f$S\f$ where \f$P = SS^T\f$, not \f$P\f$ itself.
- * This is the "square-root" in SR-UKF, providing numerical stability.
+ * **Key insight:** The filter stores \f$S\f$ where \f$P = SS^T\f$, not
+ * \f$P\f$ itself. This is the "square-root" in SR-UKF, providing
+ * numerical stability.
  *
- * @see srukf_create, srukf_create_from_noise
+ * The structure is opaque: all access goes through the accessor
+ * functions (srukf_get_state(), srukf_set_sqrt_cov(), srukf_get_scale(),
+ * ...), which keeps the ABI stable across releases -- bindings and
+ * dynamically-linked consumers survive internal layout changes.
+ *
+ * @see srukf_create, srukf_create_from_noise, srukf_free
  */
-typedef struct {
-  /** @name State Estimate
-   *  The current best estimate of the system state
-   *  @{
-   */
-  srukf_mat *x; /**< State estimate vector (N x 1) */
-  srukf_mat *S; /**< Sqrt of state covariance (N x N, lower triangular).
-                     Satisfies \f$P = SS^T\f$ where P is the covariance. */
-  /** @} */
-
-  /** @name Noise Covariances
-   *  Process and measurement noise, stored as square-roots
-   *  @{
-   */
-  srukf_mat *Qsqrt; /**< Sqrt of process noise covariance (N x N).
-                         Models uncertainty in the state transition.
-                         Larger values = less trust in the model. */
-  srukf_mat *Rsqrt; /**< Sqrt of measurement noise covariance (M x M).
-                         Models sensor noise.
-                         Larger values = less trust in measurements. */
-  /** @} */
-
-  /** @name UKF Parameters
-   *  Tuning parameters controlling sigma point distribution
-   *  @{
-   */
-  srukf_value alpha;  /**< Spread of sigma points (typically 1e-3 to 1).
-                           Smaller values keep points closer to the mean. */
-  srukf_value beta;   /**< Prior distribution knowledge (2.0 for Gaussian).
-                           Affects the zeroth covariance weight. */
-  srukf_value kappa;  /**< Secondary scaling (typically 0 or 3-N).
-                           Can be used to ensure semi-positive definiteness. */
-  srukf_value lambda; /**< Computed: \f$\alpha^2 (N + \kappa) - N\f$.
-                           Determines actual sigma point spread. */
-  /** @} */
-
-  /** @name Sigma Point Weights
-   *  Weights for reconstructing mean and covariance from sigma points
-   *  @{
-   */
-  srukf_value *wm; /**< Mean weights (2N+1 elements).
-                        \f$w^m_0 = \frac{\lambda}{N+\lambda}\f$,
-                        \f$w^m_i = \frac{1}{2(N+\lambda)}\f$ for i>0 */
-  srukf_value *wc; /**< Covariance weights (2N+1 elements).
-                        \f$w^c_0 = w^m_0 + (1 - \alpha^2 + \beta)\f$,
-                        \f$w^c_i = w^m_i\f$ for i>0.
-                        Note: \f$w^c_0\f$ can be negative for small alpha! */
-  /** @} */
-
-  srukf_workspace *ws; /**< Pre-allocated workspace (allocated on demand) */
-
-  /** @name Diagnostics
-   *  Per-instance diagnostic handler (see srukf_set_diag()).
-   *  When diag_fn is NULL, the global callback (if any) is used instead.
-   *  @{
-   */
-  void (*diag_fn)(const char *msg, void *ctx); /**< Handler, or NULL */
-  void *diag_ctx;                              /**< Opaque context for diag_fn */
-  /** @} */
-} srukf;
+typedef struct srukf srukf;
 
 /*----------------------------------------------------------------------------
  * @defgroup diagnostics Diagnostics
@@ -544,6 +491,11 @@ srukf_return srukf_set_diag(srukf *ukf, srukf_diag_handler fn, void *ctx);
  * @note Both matrices must be square. They are copied, so the originals
  *       can be freed after this call.
  *
+ * **Initial conditions:** the state is zero and the sqrt-covariance is
+ * 0.001 * I (a tight prior that lets a correct step run immediately);
+ * call srukf_reset() or srukf_set_sqrt_cov() to widen it. The scaling
+ * parameters default to alpha = 1e-3, beta = 2, kappa = 1.
+ *
  * @see srukf_create, srukf_free
  */
 srukf *srukf_create_from_noise(const srukf_mat *Qsqrt, const srukf_mat *Rsqrt);
@@ -561,6 +513,10 @@ srukf *srukf_create_from_noise(const srukf_mat *Qsqrt, const srukf_mat *Rsqrt);
  *
  * This two-step initialization is useful when noise parameters are
  * computed or loaded separately from filter creation.
+ *
+ * **Initial conditions:** the state is zero and the sqrt-covariance is
+ * 0.001 * I; the scaling parameters default to alpha = 1e-3, beta = 2,
+ * kappa = 1. See srukf_reset(), srukf_set_scale().
  *
  * @see srukf_set_noise, srukf_free
  */
@@ -593,13 +549,20 @@ void srukf_free(srukf *ukf);
  * @param ukf Filter instance
  * @param Qsqrt Process noise sqrt-covariance (N x N)
  * @param Rsqrt Measurement noise sqrt-covariance (M x M)
- * @return SRUKF_RETURN_OK on success
+ * @return SRUKF_RETURN_OK on success. SRUKF_RETURN_PARAMETER_ERROR on
+ *         NULL arguments or dimension mismatch (dimensions are fixed at
+ *         creation). SRUKF_RETURN_MEMORY_ERROR if the very first call
+ *         on a srukf_create()'d filter cannot allocate the buffers.
  *
  * **Intuition:**
  * - Larger Qsqrt = "my model is unreliable" = trust measurements more
  * - Larger Rsqrt = "my sensors are noisy" = trust model more
  *
- * @note The matrices are copied. Originals can be freed after this call.
+ * @note The matrices are copied into the filter's own buffers. Once
+ *       those buffers exist (after creation with noise, or the first
+ *       successful call), updating the noise allocates nothing -- safe
+ *       to call per-step for adaptive/time-varying noise without
+ *       breaking the zero-allocation guarantee.
  * @note On failure, the existing noise matrices are preserved.
  */
 srukf_return srukf_set_noise(srukf *ukf, const srukf_mat *Qsqrt,
@@ -647,6 +610,22 @@ srukf_return srukf_set_scale(srukf *ukf, srukf_value alpha, srukf_value beta,
  * @brief Reading and writing filter state
  * @{
  *----------------------------------------------------------------------------*/
+
+/**
+ * @brief Get the current UKF scaling parameters
+ *
+ * Reads back the parameters set by srukf_set_scale() (or the creation
+ * defaults). Any output pointer may be NULL to skip that parameter.
+ *
+ * @param ukf Filter instance
+ * @param alpha_out Receives alpha, or NULL
+ * @param beta_out Receives beta, or NULL
+ * @param kappa_out Receives kappa, or NULL
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if
+ *         ukf is NULL
+ */
+srukf_return srukf_get_scale(const srukf *ukf, srukf_value *alpha_out,
+                             srukf_value *beta_out, srukf_value *kappa_out);
 
 /**
  * @brief Get the state dimension N
@@ -812,6 +791,11 @@ srukf_return srukf_predict(srukf *ukf, srukf_model_fn f, void *user);
  * @param h Measurement model function \f$z = h(x)\f$
  * @param user User data passed to h
  * @return SRUKF_RETURN_OK on success. On error, filter state is unchanged.
+ *         SRUKF_RETURN_MATH_ERROR if the innovation covariance
+ *         \f$S_{yy}\f$ is singular -- i.e. some measurement component
+ *         has neither sigma-point spread nor noise (all-zero rows of
+ *         Rsqrt combined with a constant measurement model), making the
+ *         Kalman gain undefined.
  *
  * **Algorithm:**
  * 1. Generate sigma points from predicted state
@@ -837,6 +821,129 @@ srukf_return srukf_correct(srukf *ukf, const srukf_mat *z, srukf_model_fn h,
                            void *user);
 
 /** @} */ /* end of operations group */
+
+/*----------------------------------------------------------------------------
+ * @defgroup customspaces Custom State Spaces
+ * @brief Mean and residual hooks for non-Euclidean state or measurement
+ *        spaces (angles, headings, quaternion vector parts, ...)
+ *
+ * The UKF reconstructs means and covariances from sigma points using
+ * plain weighted sums and subtractions. For states containing angles
+ * this is wrong across the +/-pi wrap: the Euclidean mean of
+ * {+3.1, -3.1} is 0, while the correct circular mean is +/-pi.
+ *
+ * These hooks replace the two operations where the discrepancy matters:
+ *
+ * - **mean**: reconstruct the weighted mean of the sigma points
+ *   (e.g. via atan2 of weighted sine/cosine sums for angles)
+ * - **residual**: compute the difference a - b within the space
+ *   (e.g. wrapped to (-pi, pi] for angles)
+ *
+ * State-space hooks (srukf_set_state_ops()) apply to the predicted-state
+ * mean and deviations in predict, and to the state side of the
+ * cross-covariance in correct. Measurement-space hooks
+ * (srukf_set_meas_ops()) apply to the predicted-measurement mean and
+ * deviations, the innovation \f$z - \bar{z}\f$, and the measurement
+ * side of the cross-covariance.
+ *
+ * **What remains Euclidean:** sigma points are generated by linear
+ * offsets \f$\bar{x} \pm \gamma S_{:,i}\f$, and the state update adds
+ * \f$K\nu\f$ linearly. This matches standard practice (Van der Merwe;
+ * FilterPy): the hooks fix the *statistics*; process and measurement
+ * models should keep angles wrapped on output.
+ *
+ * **Requirements** on the hooks: mean of identical points must be that
+ * point; residual(a, a) must be 0; residual must be small and smooth
+ * for nearby points. Non-finite hook output fails the step with
+ * SRUKF_RETURN_MATH_ERROR (state unchanged).
+ * @{
+ *----------------------------------------------------------------------------*/
+
+/**
+ * @brief Custom weighted-mean callback
+ *
+ * Reconstructs the weighted mean of sigma points in a non-Euclidean
+ * space.
+ *
+ * @param sigma Sigma points (dim x (2N+1)), column k is point k
+ * @param wm Mean weights (2N+1 elements, sum to 1; wm[0] may be
+ *           negative for small alpha)
+ * @param mean Output mean (dim x 1), pre-allocated
+ * @param user Context pointer supplied at registration
+ *
+ * Example (circular mean for a 1-D angle state):
+ * @code
+ * void angle_mean(const srukf_mat *sigma, const srukf_value *wm,
+ *                 srukf_mat *mean, void *user) {
+ *     (void)user;
+ *     double s = 0.0, c = 0.0;
+ *     for (srukf_index k = 0; k < sigma->n_cols; ++k) {
+ *         s += wm[k] * sin(SRUKF_ENTRY(sigma, 0, k));
+ *         c += wm[k] * cos(SRUKF_ENTRY(sigma, 0, k));
+ *     }
+ *     SRUKF_ENTRY(mean, 0, 0) = atan2(s, c);
+ * }
+ * @endcode
+ */
+typedef void (*srukf_mean_fn)(const srukf_mat *sigma, const srukf_value *wm,
+                              srukf_mat *mean, void *user);
+
+/**
+ * @brief Custom residual callback
+ *
+ * Computes the difference a - b within a non-Euclidean space.
+ *
+ * @param a First operand (dim x 1)
+ * @param b Second operand (dim x 1)
+ * @param out Output residual (dim x 1), pre-allocated; may alias a
+ * @param user Context pointer supplied at registration
+ *
+ * Example (wrapped difference for a 1-D angle state):
+ * @code
+ * void angle_residual(const srukf_mat *a, const srukf_mat *b,
+ *                     srukf_mat *out, void *user) {
+ *     (void)user;
+ *     double d = SRUKF_ENTRY(a, 0, 0) - SRUKF_ENTRY(b, 0, 0);
+ *     SRUKF_ENTRY(out, 0, 0) = atan2(sin(d), cos(d));
+ * }
+ * @endcode
+ */
+typedef void (*srukf_residual_fn)(const srukf_mat *a, const srukf_mat *b,
+                                  srukf_mat *out, void *user);
+
+/**
+ * @brief Set mean/residual hooks for the state space
+ *
+ * Either function may be NULL to keep the default Euclidean operation
+ * for that role. Pass both as NULL to restore fully Euclidean behavior.
+ *
+ * @param ukf Filter instance
+ * @param mean_fn Weighted-mean hook, or NULL for the default
+ * @param residual_fn Residual hook, or NULL for the default
+ * @param user Opaque pointer passed through to the hooks
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if
+ *         ukf is NULL
+ */
+srukf_return srukf_set_state_ops(srukf *ukf, srukf_mean_fn mean_fn,
+                                 srukf_residual_fn residual_fn, void *user);
+
+/**
+ * @brief Set mean/residual hooks for the measurement space
+ *
+ * Either function may be NULL to keep the default Euclidean operation
+ * for that role. Pass both as NULL to restore fully Euclidean behavior.
+ *
+ * @param ukf Filter instance
+ * @param mean_fn Weighted-mean hook, or NULL for the default
+ * @param residual_fn Residual hook, or NULL for the default
+ * @param user Opaque pointer passed through to the hooks
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if
+ *         ukf is NULL
+ */
+srukf_return srukf_set_meas_ops(srukf *ukf, srukf_mean_fn mean_fn,
+                                srukf_residual_fn residual_fn, void *user);
+
+/** @} */ /* end of customspaces group */
 
 /*----------------------------------------------------------------------------
  * @defgroup innovation Innovation Access
@@ -942,8 +1049,7 @@ srukf_return srukf_predict_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
  * @return SRUKF_RETURN_OK on success. On error, x and S are unchanged.
  */
 srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
-                              const srukf_mat *z, srukf_model_fn h,
-                              void *user);
+                              const srukf_mat *z, srukf_model_fn h, void *user);
 
 /** @} */ /* end of transactional group */
 
@@ -964,11 +1070,11 @@ srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
  * real-time operation).
  *
  * @param ukf Filter instance
- * @return SRUKF_RETURN_OK on success
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_MEMORY_ERROR if
+ *         allocation fails
  *
- * @note Workspace size depends on N and M. If these change (via
- *       srukf_set_noise with different dimensions), workspace is
- *       reallocated automatically.
+ * @note Workspace size depends on N and M, which are fixed at filter
+ *       creation.
  */
 srukf_return srukf_alloc_workspace(srukf *ukf);
 

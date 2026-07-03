@@ -94,6 +94,69 @@ static void test_create_from_noise_nonsquare_R(void) {
   printf("  test_nonsquare_R     OK\n");
 }
 
+/* ========================= srukf_mat_alloc hardening ================ */
+
+static void test_mat_alloc_zero_dims(void) {
+  assert(srukf_mat_alloc(0, 5, 1) == NULL);
+  assert(srukf_mat_alloc(5, 0, 1) == NULL);
+  assert(srukf_mat_alloc(0, 0, 1) == NULL);
+  assert(srukf_mat_alloc(0, 5, 0) == NULL); /* no-data descriptors too */
+  printf("  test_mat_alloc_zero  OK\n");
+}
+
+static void test_mat_alloc_overflow(void) {
+  /* rows * cols wraps the size_t multiplication to a tiny value; the
+   * result would be a descriptor claiming 2^61 rows over a (nearly)
+   * empty buffer.  Must be rejected before calloc ever sees it. */
+  srukf_index huge = ((srukf_index)1) << 61;
+  assert(srukf_mat_alloc(huge, 8, 1) == NULL);
+  assert(srukf_mat_alloc(8, huge, 1) == NULL);
+  printf("  test_mat_alloc_ovf   OK\n");
+}
+
+/* ========================= set_noise in-place update ================ */
+
+/* Once buffers exist, set_noise must update them in place: no
+ * reallocation (the data pointers are stable) and exact value copy.
+ * The first call after srukf_create() allocates the buffers. */
+static void test_set_noise_in_place(void) {
+  const int N = 2, M = 2;
+  srukf *ukf = srukf_create(N, M);
+  assert(ukf);
+  assert(ukf->Qsqrt->data == NULL); /* created without noise buffers */
+
+  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
+  assert(Q && R);
+  for (int i = 0; i < N; ++i)
+    SRUKF_ENTRY(Q, i, i) = 0.5;
+  for (int i = 0; i < M; ++i)
+    SRUKF_ENTRY(R, i, i) = 0.25;
+
+  assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  srukf_value *qdata = ukf->Qsqrt->data;
+  srukf_value *rdata = ukf->Rsqrt->data;
+  assert(qdata && rdata);
+  assert(SRUKF_ENTRY(ukf->Qsqrt, 0, 0) == 0.5);
+  assert(SRUKF_ENTRY(ukf->Rsqrt, 1, 1) == 0.25);
+
+  /* Second call: same buffers, new values. */
+  SRUKF_ENTRY(Q, 0, 0) = 0.7;
+  SRUKF_ENTRY(Q, 1, 0) = 0.1;
+  SRUKF_ENTRY(R, 1, 1) = 0.9;
+  assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  assert(ukf->Qsqrt->data == qdata);
+  assert(ukf->Rsqrt->data == rdata);
+  assert(SRUKF_ENTRY(ukf->Qsqrt, 0, 0) == 0.7);
+  assert(SRUKF_ENTRY(ukf->Qsqrt, 1, 0) == 0.1);
+  assert(SRUKF_ENTRY(ukf->Rsqrt, 1, 1) == 0.9);
+
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_free(ukf);
+  printf("  test_set_noise_inplace OK\n");
+}
+
 /* ========================= SRUKF_MAT_ALLOC_NO_DATA (NoData flag) ========== */
 
 static void test_alloc_matrix_later(void) {
@@ -281,6 +344,55 @@ static void test_chol_downdate_failure_3d(void) {
   printf("  test_chol_downdate_fail_3d OK\n");
 }
 
+/* Exact cancellation: v removes ALL variance along the first axis while
+ * correlation with the second axis remains.  P - v*v' is indefinite
+ * (det < 0), so the downdate must fail; the historical bug was a
+ * division by zero here (c = r/Sjj with r = 0) that wrote -inf into S
+ * and returned OK. */
+static void test_chol_downdate_exact_cancellation(void) {
+  srukf_mat *S = SRUKF_MAT_ALLOC(2, 2);
+  assert(S);
+  SRUKF_ENTRY(S, 0, 0) = 1.0;
+  SRUKF_ENTRY(S, 1, 0) = 0.5;
+  SRUKF_ENTRY(S, 1, 1) = 1.0;
+
+  /* P = S*S' = [[1, 0.5], [0.5, 1.25]];  v*v' = [[1, 0.6], [0.6, 0.36]]
+   * P - v*v' = [[0, -0.1], [-0.1, 0.89]] -> indefinite (det = -0.01) */
+  srukf_value v[2] = {1.0, 0.6};
+  srukf_value work[2];
+
+  srukf_return rc = chol_downdate_rank1(S, v, work);
+  assert(rc == SRUKF_RETURN_MATH_ERROR);
+
+  srukf_mat_free(S);
+  printf("  test_chol_downdate_exact_cancel OK\n");
+}
+
+/* Near cancellation: r2 = Sjj^2 - wj^2 is positive but far below the
+ * working precision relative to Sjj^2.  Proceeding would amplify the
+ * remaining column by 1/c ~ 1/sqrt(r2) -- silently garbage, so it must
+ * be rejected just like the indefinite case. */
+static void test_chol_downdate_near_cancellation(void) {
+  srukf_mat *S = SRUKF_MAT_ALLOC(2, 2);
+  assert(S);
+  SRUKF_ENTRY(S, 0, 0) = 1.0;
+  SRUKF_ENTRY(S, 1, 0) = 0.5;
+  SRUKF_ENTRY(S, 1, 1) = 1.0;
+
+  /* r2 = 1 - (1 - 5e-14)^2 ~ 1e-13: positive, but c ~ 3e-7 would
+   * scale S(1,0) from -0.1 to ~ -3e5. */
+  srukf_value v[2] = {1.0 - 5e-14, 0.6};
+  srukf_value work[2];
+
+  /* (In single precision 1 - 5e-14 rounds to 1.0, collapsing onto the
+   * exact-cancellation case -- the expectation is the same.) */
+  srukf_return rc = chol_downdate_rank1(S, v, work);
+  assert(rc == SRUKF_RETURN_MATH_ERROR);
+
+  srukf_mat_free(S);
+  printf("  test_chol_downdate_near_cancel OK\n");
+}
+
 /* Test successful downdate for comparison */
 static void test_chol_downdate_success(void) {
   srukf_mat *S = SRUKF_MAT_ALLOC(2, 2);
@@ -309,58 +421,156 @@ static void test_chol_downdate_success(void) {
   printf("  test_chol_downdate_ok OK\n");
 }
 
-/* ========================= Near-zero Syy (early return path) ======= */
+/* ========================= Singular / tiny Syy ===================== */
 
-/* When Syy is essentially zero, srukf_correct_core has an early return that
- * copies input to output without updating. This can happen with very small
- * state covariance and very small measurement noise.
- */
-static void test_syy_near_zero(void) {
+/* A filter legitimately operating at tiny absolute scales must NOT have
+ * its measurements discarded: the Kalman gain is scale-invariant in Syy,
+ * so a well-conditioned Syy of magnitude 1e-15 is perfectly usable.
+ * (Historically an ABSOLUTE Syy < eps test silently skipped the update
+ * and still returned OK.) */
+static void test_tiny_scale_update(void) {
+  srukf *ukf = srukf_create(1, 1);
+  assert(ukf);
+
+  srukf_mat *Q = SRUKF_MAT_ALLOC(1, 1);
+  srukf_mat *R = SRUKF_MAT_ALLOC(1, 1);
+  assert(Q && R);
+  SRUKF_ENTRY(Q, 0, 0) = 1e-16;
+  SRUKF_ENTRY(R, 0, 0) = 1e-15;
+  assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  /* alpha = 1 for clean weights: gamma = 1, pyy = p + r^2 */
+  assert(srukf_set_scale(ukf, 1.0, 2.0, 0.0) == SRUKF_RETURN_OK);
+
+  SRUKF_ENTRY(ukf->x, 0, 0) = 0.0;
+  SRUKF_ENTRY(ukf->S, 0, 0) = 1e-15;
+
+  /* Innovation of 1e-13 at prior variance p = 1e-30, r^2 = 1e-30:
+   * K = p / (p + r^2) = 0.5, so the update must move x to ~ 0.5e-13. */
+  srukf_mat *z = SRUKF_MAT_ALLOC(1, 1);
+  assert(z);
+  SRUKF_ENTRY(z, 0, 0) = 1e-13;
+
+  srukf_return rc = srukf_correct(ukf, z, meas_identity, NULL);
+  assert(rc == SRUKF_RETURN_OK);
+
+  double x_post = SRUKF_ENTRY(ukf->x, 0, 0);
+  assert(x_post > 0.4e-13 && x_post < 0.6e-13);
+  assert(isfinite(SRUKF_ENTRY(ukf->S, 0, 0)));
+
+  /* The innovation must be available: the measurement was incorporated. */
+  srukf_value nis = -1.0;
+  assert(srukf_get_nis(ukf, &nis) == SRUKF_RETURN_OK);
+  assert(isfinite(nis) && nis >= 0.0);
+
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_mat_free(z);
+  srukf_free(ukf);
+  printf("  test_tiny_scale_update OK\n");
+}
+
+/* Measurement model with no spread at all: h(x) = const.  Combined with
+ * a zero Rsqrt, Syy is exactly singular -- the Kalman gain is undefined
+ * and correct must FAIL (leaving the state untouched) rather than
+ * silently ignore the measurement and report success. */
+static void meas_constant(const srukf_mat *x, srukf_mat *z, void *user) {
+  (void)x;
+  (void)user;
+  for (srukf_index i = 0; i < z->n_rows; ++i)
+    SRUKF_ENTRY(z, i, 0) = 1.0 + (srukf_value)i;
+}
+
+static void test_syy_singular(void) {
   const int N = 2, M = 2;
   srukf *ukf = srukf_create(N, M);
   assert(ukf);
 
-  /* Very small noise - sqrt of tiny variance */
   srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
-  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M); /* all zeros: no measurement noise */
   assert(Q && R);
   for (int i = 0; i < N; ++i)
-    SRUKF_ENTRY(Q, i, i) = 1e-15;
-  for (int i = 0; i < M; ++i)
-    SRUKF_ENTRY(R, i, i) = 1e-15;
+    SRUKF_ENTRY(Q, i, i) = 0.1;
   assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  /* Benign weights (alpha = 1): with the default alpha = 1e-3 the huge
+   * wm[0] turns the exactly-zero deviation column into ~1e-6 roundoff,
+   * blurring the singularity this test is constructing. */
+  assert(srukf_set_scale(ukf, 1.0, 2.0, 0.0) == SRUKF_RETURN_OK);
 
-  /* Very small state covariance */
-  for (int i = 0; i < N; ++i)
-    SRUKF_ENTRY(ukf->S, i, i) = 1e-15;
-
-  /* Save state before correct */
-  double x0_before = SRUKF_ENTRY(ukf->x, 0, 0);
-  double x1_before = SRUKF_ENTRY(ukf->x, 1, 0);
+  for (int i = 0; i < N; ++i) {
+    SRUKF_ENTRY(ukf->x, i, 0) = 3.0;
+    SRUKF_ENTRY(ukf->S, i, i) = 1.0;
+  }
 
   srukf_mat *z = SRUKF_MAT_ALLOC(M, 1);
   assert(z);
   SRUKF_ENTRY(z, 0, 0) = 100.0;
   SRUKF_ENTRY(z, 1, 0) = 200.0;
 
-  /* With near-zero Syy, the state might not change much or at all */
-  srukf_return rc = srukf_correct(ukf, z, meas_identity, NULL);
-  assert(rc == SRUKF_RETURN_OK);
+  srukf_return rc = srukf_correct(ukf, z, meas_constant, NULL);
+  assert(rc == SRUKF_RETURN_MATH_ERROR);
 
-  /* Just verify state is still valid (not NaN/Inf) */
-  assert(isfinite(SRUKF_ENTRY(ukf->x, 0, 0)));
-  assert(isfinite(SRUKF_ENTRY(ukf->x, 1, 0)));
+  /* Transactional: the failed step must not have touched the state. */
+  for (int i = 0; i < N; ++i)
+    assert(SRUKF_ENTRY(ukf->x, i, 0) == 3.0);
 
-  /* If Syy_zero path was taken, state should be unchanged */
-  /* (This is a soft check - implementation may vary) */
-  (void)x0_before;
-  (void)x1_before;
+  /* No innovation available from a failed step. */
+  srukf_value nis;
+  assert(srukf_get_nis(ukf, &nis) == SRUKF_RETURN_PARAMETER_ERROR);
 
   srukf_mat_free(Q);
   srukf_mat_free(R);
   srukf_mat_free(z);
   srukf_free(ukf);
-  printf("  test_syy_near_zero   OK\n");
+  printf("  test_syy_singular    OK\n");
+}
+
+/* One observable component, one degenerate component: Syy has one
+ * healthy diagonal and one ~zero diagonal.  Relative to the healthy
+ * one it is singular, so the step must fail. */
+static void meas_first_only(const srukf_mat *x, srukf_mat *z, void *user) {
+  (void)user;
+  SRUKF_ENTRY(z, 0, 0) = SRUKF_ENTRY(x, 0, 0);
+  SRUKF_ENTRY(z, 1, 0) = 42.0; /* constant: no information, no noise */
+}
+
+static void test_syy_partially_singular(void) {
+  const int N = 2, M = 2;
+  srukf *ukf = srukf_create(N, M);
+  assert(ukf);
+
+  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
+  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
+  assert(Q && R);
+  for (int i = 0; i < N; ++i)
+    SRUKF_ENTRY(Q, i, i) = 0.1;
+  SRUKF_ENTRY(R, 0, 0) = 0.1;
+  /* R(1,1) left at zero: second component has neither spread nor noise */
+  assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  /* Benign weights so the degenerate column stays exactly zero. */
+  assert(srukf_set_scale(ukf, 1.0, 2.0, 0.0) == SRUKF_RETURN_OK);
+
+  for (int i = 0; i < N; ++i) {
+    SRUKF_ENTRY(ukf->x, i, 0) = 1.0;
+    SRUKF_ENTRY(ukf->S, i, i) = 1.0;
+  }
+
+  srukf_mat *z = SRUKF_MAT_ALLOC(M, 1);
+  assert(z);
+  SRUKF_ENTRY(z, 0, 0) = 2.0;
+  SRUKF_ENTRY(z, 1, 0) = 42.0;
+
+  srukf_return rc = srukf_correct(ukf, z, meas_first_only, NULL);
+  assert(rc == SRUKF_RETURN_MATH_ERROR);
+
+  /* State untouched by the failed step. */
+  for (int i = 0; i < N; ++i)
+    assert(SRUKF_ENTRY(ukf->x, i, 0) == 1.0);
+
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_mat_free(z);
+  srukf_free(ukf);
+  printf("  test_syy_partial_singular OK\n");
 }
 
 /* ========================= propagate_sigma_points errors =========== */
@@ -497,6 +707,13 @@ int main(void) {
   test_create_from_noise_nonsquare_Q();
   test_create_from_noise_nonsquare_R();
 
+  /* srukf_mat_alloc hardening */
+  test_mat_alloc_zero_dims();
+  test_mat_alloc_overflow();
+
+  /* set_noise in-place update */
+  test_set_noise_in_place();
+
   /* SRUKF_MAT_ALLOC_NO_DATA */
   test_alloc_matrix_later();
 
@@ -508,10 +725,14 @@ int main(void) {
   /* Cholesky downdate */
   test_chol_downdate_failure();
   test_chol_downdate_failure_3d();
+  test_chol_downdate_exact_cancellation();
+  test_chol_downdate_near_cancellation();
   test_chol_downdate_success();
 
-  /* Near-zero Syy */
-  test_syy_near_zero();
+  /* Singular / tiny Syy */
+  test_tiny_scale_update();
+  test_syy_singular();
+  test_syy_partially_singular();
 
   /* propagate_sigma_points errors */
   test_propagate_null_ysig_data();

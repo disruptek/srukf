@@ -24,8 +24,10 @@ static void verify_sigma_points(srukf *f, srukf_mat *Xsig) {
   /* Columns N+1..2N: x - gamma * S(:,k) */
   for (srukf_index k = 0; k < N; k++) {
     for (srukf_index i = 0; i < N; i++) {
-      srukf_value plus = SRUKF_ENTRY(f->x, i, 0) + gamma * SRUKF_ENTRY(f->S, i, k);
-      srukf_value minus = SRUKF_ENTRY(f->x, i, 0) - gamma * SRUKF_ENTRY(f->S, i, k);
+      srukf_value plus =
+          SRUKF_ENTRY(f->x, i, 0) + gamma * SRUKF_ENTRY(f->S, i, k);
+      srukf_value minus =
+          SRUKF_ENTRY(f->x, i, 0) - gamma * SRUKF_ENTRY(f->S, i, k);
       assert(fabs(SRUKF_ENTRY(Xsig, i, k + 1) - plus) < EPS);
       assert(fabs(SRUKF_ENTRY(Xsig, i, k + 1 + N) - minus) < EPS);
     }
@@ -34,7 +36,8 @@ static void verify_sigma_points(srukf *f, srukf_mat *Xsig) {
   /* Verify symmetry: sigma points should be symmetric around mean */
   for (srukf_index k = 0; k < N; k++) {
     for (srukf_index i = 0; i < N; i++) {
-      srukf_value diff_plus = SRUKF_ENTRY(Xsig, i, k + 1) - SRUKF_ENTRY(f->x, i, 0);
+      srukf_value diff_plus =
+          SRUKF_ENTRY(Xsig, i, k + 1) - SRUKF_ENTRY(f->x, i, 0);
       srukf_value diff_minus =
           SRUKF_ENTRY(Xsig, i, k + 1 + N) - SRUKF_ENTRY(f->x, i, 0);
       assert(fabs(diff_plus + diff_minus) < EPS); /* should sum to zero */
@@ -61,8 +64,7 @@ static void test_basic_3d(void) {
 
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(3, 7); /* N=3, 2N+1=7 */
   assert(Xsig);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
@@ -83,8 +85,7 @@ static void test_1d(void) {
 
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(1, 3); /* N=1, 2N+1=3 */
   assert(Xsig);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
@@ -118,8 +119,7 @@ static void test_10d(void) {
 
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(N, 2 * N + 1);
   assert(Xsig);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
@@ -150,8 +150,7 @@ static void test_zero_state(void) {
 
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(3, 7);
   assert(Xsig);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
@@ -181,20 +180,17 @@ static void test_alpha_variations(void) {
 
   /* Test with small alpha (tight spread) */
   srukf_set_scale(f, 1e-3, 2.0, 0.0);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
   verify_sigma_points(f, Xsig);
 
   /* Test with alpha = 1 (standard spread) */
   srukf_set_scale(f, 1.0, 2.0, 0.0);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
   verify_sigma_points(f, Xsig);
 
   /* Test with larger alpha */
   srukf_set_scale(f, 2.0, 2.0, 0.0);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
   verify_sigma_points(f, Xsig);
 
   srukf_mat_free(Xsig);
@@ -220,8 +216,7 @@ static void test_correlated_states(void) {
 
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(2, 5);
   assert(Xsig);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
@@ -248,8 +243,7 @@ static void test_scale_differences(void) {
 
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(3, 7);
   assert(Xsig);
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig) ==
-         SRUKF_RETURN_OK);
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig) == SRUKF_RETURN_OK);
 
   verify_sigma_points(f, Xsig);
 
@@ -269,17 +263,17 @@ static void test_errors(void) {
   assert(f);
 
   /* NULL Xsig */
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, NULL) ==
+  assert(generate_sigma_points_from(f, f->x, f->S, NULL) ==
          SRUKF_RETURN_PARAMETER_ERROR);
 
   /* Wrong dimensions */
   srukf_mat *Xsig_wrong = SRUKF_MAT_ALLOC(3, 5); /* wrong rows */
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig_wrong) ==
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig_wrong) ==
          SRUKF_RETURN_PARAMETER_ERROR);
   srukf_mat_free(Xsig_wrong);
 
   Xsig_wrong = SRUKF_MAT_ALLOC(2, 4); /* wrong columns */
-  assert(generate_sigma_points_from(f->x, f->S, f->lambda, Xsig_wrong) ==
+  assert(generate_sigma_points_from(f, f->x, f->S, Xsig_wrong) ==
          SRUKF_RETURN_PARAMETER_ERROR);
   srukf_mat_free(Xsig_wrong);
 

@@ -31,6 +31,7 @@ from ._bindings import (
     SrukfFilter,
     SrukfMat,
     SRUKF_RETURN_MATH_ERROR,
+    SRUKF_RETURN_MEMORY_ERROR,
     SRUKF_RETURN_OK,
     SRUKF_RETURN_PARAMETER_ERROR,
     lib,
@@ -60,14 +61,19 @@ class SrukfMathError(SrukfError):
     """Raised when the C library returns ``SRUKF_RETURN_MATH_ERROR``."""
 
 
+class SrukfMemoryError(SrukfError, MemoryError):
+    """Raised when the C library returns ``SRUKF_RETURN_MEMORY_ERROR``."""
+
+
 _RETURN_EXCEPTIONS = {
     SRUKF_RETURN_PARAMETER_ERROR: SrukfParameterError,
     SRUKF_RETURN_MATH_ERROR: SrukfMathError,
+    SRUKF_RETURN_MEMORY_ERROR: SrukfMemoryError,
 }
 
 
 def lib_version() -> str:
-    """Version string of the loaded C library (e.g. ``"1.1.0"``).
+    """Version string of the loaded C library (e.g. ``"2.0.0"``).
 
     This is the runtime library's version, which can differ from the
     Python package's ``srukf.__version__`` if they were built separately.
@@ -382,6 +388,23 @@ class UnscentedKalmanFilter:
             return srukf_mat_to_numpy(out_mat, copy=True)
         finally:
             lib.srukf_mat_free(out_mat)
+
+    @property
+    def scale(self) -> tuple:
+        """The UKF scaling parameters as an ``(alpha, beta, kappa)`` tuple."""
+        alpha = srukf_value(0.0)
+        beta = srukf_value(0.0)
+        kappa = srukf_value(0.0)
+        _check(
+            lib.srukf_get_scale(
+                self._ptr,
+                ctypes.byref(alpha),
+                ctypes.byref(beta),
+                ctypes.byref(kappa),
+            ),
+            "get_scale",
+        )
+        return (float(alpha.value), float(beta.value), float(kappa.value))
 
     @property
     def nis(self) -> float:

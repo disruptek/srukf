@@ -177,29 +177,29 @@ static void test_sigma_points_errors(void) {
   /* NULL x */
   srukf_mat *Xsig = SRUKF_MAT_ALLOC(2, 5);
   assert(Xsig);
-  rc = generate_sigma_points_from(NULL, ukf->S, ukf->lambda, Xsig);
+  rc = generate_sigma_points_from(ukf, NULL, ukf->S, Xsig);
   assert(rc == SRUKF_RETURN_PARAMETER_ERROR);
 
   /* NULL Xsig */
-  rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, NULL);
+  rc = generate_sigma_points_from(ukf, ukf->x, ukf->S, NULL);
   assert(rc == SRUKF_RETURN_PARAMETER_ERROR);
 
   /* Wrong Xsig rows */
   srukf_mat *Xsig_wrong_rows = SRUKF_MAT_ALLOC(3, 5);
   assert(Xsig_wrong_rows);
-  rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, Xsig_wrong_rows);
+  rc = generate_sigma_points_from(ukf, ukf->x, ukf->S, Xsig_wrong_rows);
   assert(rc == SRUKF_RETURN_PARAMETER_ERROR);
   srukf_mat_free(Xsig_wrong_rows);
 
   /* Wrong Xsig columns */
   srukf_mat *Xsig_wrong_cols = SRUKF_MAT_ALLOC(2, 4);
   assert(Xsig_wrong_cols);
-  rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, Xsig_wrong_cols);
+  rc = generate_sigma_points_from(ukf, ukf->x, ukf->S, Xsig_wrong_cols);
   assert(rc == SRUKF_RETURN_PARAMETER_ERROR);
   srukf_mat_free(Xsig_wrong_cols);
 
   /* Valid case */
-  rc = generate_sigma_points_from(ukf->x, ukf->S, ukf->lambda, Xsig);
+  rc = generate_sigma_points_from(ukf, ukf->x, ukf->S, Xsig);
   assert(rc == SRUKF_RETURN_OK);
 
   srukf_mat_free(Xsig);
@@ -503,10 +503,8 @@ static void test_scale_nonfinite(void) {
   /* N + kappa <= 0 requires the sqrt of a non-positive number; it must
    * be rejected rather than smuggling NaN into alpha via the old
    * lambda-clamping path. */
-  assert(srukf_set_scale(ukf, 1e-7, 2.0, -4.0) ==
-         SRUKF_RETURN_PARAMETER_ERROR);
-  assert(srukf_set_scale(ukf, 0.5, 2.0, -3.0) ==
-         SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 1e-7, 2.0, -4.0) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 0.5, 2.0, -3.0) == SRUKF_RETURN_PARAMETER_ERROR);
 
   /* previous parameters and weights survive all the failed calls */
   assert(ukf->alpha == alpha && ukf->beta == beta && ukf->kappa == kappa);

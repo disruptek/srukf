@@ -42,6 +42,7 @@ srukf_index = c_size_t
 SRUKF_RETURN_OK = 0
 SRUKF_RETURN_PARAMETER_ERROR = 1
 SRUKF_RETURN_MATH_ERROR = 2
+SRUKF_RETURN_MEMORY_ERROR = 3
 
 # ---------------------------------------------------------------------------
 # Matrix type flags
@@ -87,27 +88,15 @@ class SrukfWorkspace(Structure):
 
 
 class SrukfFilter(Structure):
-    """ctypes mirror of the C ``srukf`` structure.
+    """Opaque handle for the C ``srukf`` structure.
 
-    We declare only the fields we need to read; the workspace pointer
-    is opaque.
+    The C struct is opaque as of v2.0.0: its layout is intentionally
+    hidden so it can evolve without breaking bindings.  All access goes
+    through accessor functions (``srukf_get_state``, ``srukf_get_scale``,
+    ...); Python only ever holds a ``POINTER(SrukfFilter)``.
     """
 
-    _fields_ = [
-        ("x", POINTER(SrukfMat)),
-        ("S", POINTER(SrukfMat)),
-        ("Qsqrt", POINTER(SrukfMat)),
-        ("Rsqrt", POINTER(SrukfMat)),
-        ("alpha", srukf_value),
-        ("beta", srukf_value),
-        ("kappa", srukf_value),
-        ("lambda_", srukf_value),  # 'lambda' is a Python keyword
-        ("wm", POINTER(srukf_value)),
-        ("wc", POINTER(srukf_value)),
-        ("ws", POINTER(SrukfWorkspace)),
-        ("diag_fn", c_void_p),  # per-instance diagnostic handler
-        ("diag_ctx", c_void_p),
-    ]
+    _fields_: list = []
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +242,14 @@ def _declare_functions(lib: ctypes.CDLL) -> None:
     lib.srukf_set_scale.restype = c_int
 
     # -- Accessors ----------------------------------------------------------
+    lib.srukf_get_scale.argtypes = [
+        POINTER(SrukfFilter),
+        POINTER(srukf_value),
+        POINTER(srukf_value),
+        POINTER(srukf_value),
+    ]
+    lib.srukf_get_scale.restype = c_int
+
     lib.srukf_state_dim.argtypes = [POINTER(SrukfFilter)]
     lib.srukf_state_dim.restype = srukf_index
 
