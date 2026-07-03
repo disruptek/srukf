@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.15)
 
+# The version is owned by srukf.h (see CONTRIBUTING.md); parse it.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/srukf.h _srukf_version_line
+     REGEX "^#define SRUKF_VERSION \"")
+if(NOT _srukf_version_line MATCHES "\"([0-9]+\\.[0-9]+\\.[0-9]+)\"")
+  message(FATAL_ERROR "Cannot parse SRUKF_VERSION from srukf.h")
+endif()
+
 project(srukf
-  VERSION 1.0.0
+  VERSION ${CMAKE_MATCH_1}
   DESCRIPTION "Square-Root Unscented Kalman Filter"
   LANGUAGES C
 )
@@ -113,26 +120,6 @@ endif()
 if(SRUKF_BUILD_TESTS)
   enable_testing()
 
-  # Internal tests: compile srukf.c directly (the test #includes srukf.c)
-  set(INTERNAL_TESTS
-    00_sigma
-    06_predict
-    10_simple
-    20_nonlinear
-    30_errors
-    35_numerical
-    40_stress
-    46_edge_cases
-  )
-
-  # Public API tests: link against the library
-  set(PUBLIC_TESTS
-    01_weights
-    02_weights
-    05_correct
-    45_accessors
-  )
-
   # Preferred link target for public API tests and examples
   if(SRUKF_BUILD_SHARED)
     set(SRUKF_LINK_TARGET srukf_shared)
@@ -140,36 +127,24 @@ if(SRUKF_BUILD_TESTS)
     set(SRUKF_LINK_TARGET srukf_static)
   endif()
 
+  # Tests are discovered and classified by convention (CONTRIBUTING.md):
+  # a test that does `#include "srukf.c"` compiles the library source
+  # directly (internal) and only needs the include path and deps; any
+  # other tests/*.c links the library (public). Per-test flags such as
+  # SRUKF_SINGLE are defined by the test source itself. Adding a test
+  # therefore requires no build-system edits.
+  #
   # Tests use assert() for validation.  CMake's Release/RelWithDebInfo
   # build types add -DNDEBUG which disables assert().  We must ensure
-  # NDEBUG is never defined for test targets.
-  #
-  # The portable approach: add -UNDEBUG after any -DNDEBUG that CMake
-  # injects via CMAKE_C_FLAGS_<CONFIG>.  This works on GCC, Clang, and
-  # MSVC (/UNDEBUG is not needed — MSVC uses /D, but the principle holds).
-  foreach(test_name IN LISTS INTERNAL_TESTS)
-    add_executable(test_${test_name} tests/${test_name}.c)
-    # These tests #include "srukf.c" themselves, so they compile the
-    # library source directly.  We only need the include path and deps.
-    target_include_directories(test_${test_name} PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    target_compile_options(test_${test_name} PRIVATE
-      ${SRUKF_PRIVATE_COMPILE_OPTIONS} -UNDEBUG
-    )
-    target_compile_definitions(test_${test_name} PRIVATE ${SRUKF_PRIVATE_COMPILE_DEFINITIONS})
-    target_link_libraries(test_${test_name} PRIVATE ${SRUKF_LINK_LIBS})
-    set_target_properties(test_${test_name} PROPERTIES
-      C_STANDARD          99
-      C_STANDARD_REQUIRED ON
-      C_EXTENSIONS        OFF
-    )
-    add_test(NAME ${test_name} COMMAND test_${test_name})
-  endforeach()
+  # NDEBUG is never defined for test targets, so -UNDEBUG follows any
+  # -DNDEBUG that CMake injects via CMAKE_C_FLAGS_<CONFIG>.
+  file(GLOB SRUKF_TEST_SOURCES CONFIGURE_DEPENDS
+       ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.c)
+  foreach(test_src IN LISTS SRUKF_TEST_SOURCES)
+    get_filename_component(test_name ${test_src} NAME_WE)
+    file(STRINGS ${test_src} _includes_impl REGEX "#include \"srukf\\.c\"")
 
-  foreach(test_name IN LISTS PUBLIC_TESTS)
-    add_executable(test_${test_name} tests/${test_name}.c)
-    target_link_libraries(test_${test_name} PRIVATE ${SRUKF_LINK_TARGET})
+    add_executable(test_${test_name} ${test_src})
     target_compile_options(test_${test_name} PRIVATE
       ${SRUKF_PRIVATE_COMPILE_OPTIONS} -UNDEBUG
     )
@@ -178,26 +153,35 @@ if(SRUKF_BUILD_TESTS)
       C_STANDARD_REQUIRED ON
       C_EXTENSIONS        OFF
     )
+    if(_includes_impl)
+      target_include_directories(test_${test_name} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+      )
+      target_compile_definitions(test_${test_name} PRIVATE
+        ${SRUKF_PRIVATE_COMPILE_DEFINITIONS}
+      )
+      target_link_libraries(test_${test_name} PRIVATE ${SRUKF_LINK_LIBS})
+    else()
+      target_link_libraries(test_${test_name} PRIVATE ${SRUKF_LINK_TARGET})
+    endif()
     add_test(NAME ${test_name} COMMAND test_${test_name})
   endforeach()
 
-  # Single-precision test (always compiled with -DSRUKF_SINGLE regardless
-  # of the global SRUKF_SINGLE_PRECISION option)
-  add_executable(test_47_single_precision tests/47_single_precision.c)
-  target_include_directories(test_47_single_precision PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-  )
-  target_compile_options(test_47_single_precision PRIVATE
-    ${SRUKF_PRIVATE_COMPILE_OPTIONS} -UNDEBUG
-  )
-  target_compile_definitions(test_47_single_precision PRIVATE HAVE_LAPACK SRUKF_SINGLE)
-  target_link_libraries(test_47_single_precision PRIVATE ${SRUKF_LINK_LIBS})
-  set_target_properties(test_47_single_precision PROPERTIES
-    C_STANDARD          99
-    C_STANDARD_REQUIRED ON
-    C_EXTENSIONS        OFF
-  )
-  add_test(NAME 47_single_precision COMMAND test_47_single_precision)
+  # C++ linkage test: verifies the extern "C" guards in the public
+  # header. Only built when a C++ compiler is available.
+  include(CheckLanguage)
+  check_language(CXX)
+  if(CMAKE_CXX_COMPILER)
+    enable_language(CXX)
+    add_executable(test_90_cpp_linkage tests/90_cpp_linkage.cpp)
+    target_link_libraries(test_90_cpp_linkage PRIVATE ${SRUKF_LINK_TARGET})
+    target_compile_options(test_90_cpp_linkage PRIVATE -Wall -Wextra -UNDEBUG)
+    set_target_properties(test_90_cpp_linkage PROPERTIES
+      CXX_STANDARD          11
+      CXX_STANDARD_REQUIRED ON
+    )
+    add_test(NAME 90_cpp_linkage COMMAND test_90_cpp_linkage)
+  endif()
 endif()
 
 # ── Examples ─────────────────────────────────────────────────────────

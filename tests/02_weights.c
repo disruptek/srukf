@@ -127,29 +127,41 @@ static void test_negative_lambda(void) {
 }
 
 /* ---------- test 5 – very small α (α → 0) ------------ */
+/* An α so small that n + λ = α²(n+κ) underflows the working precision
+ * must be REJECTED: the weights would be O(1/(n+λ)) garbage. (The old
+ * behavior silently clamped λ and recomputed α, which could smuggle
+ * NaN into the filter for κ < -n.) The previous parameters and weights
+ * must survive the rejected call. */
 static void test_small_alpha(void) {
   srukf *ukf = srukf_create(6, 1);
   assert(ukf && ukf->x);
-
-  /* Set the filter with an extremely small α. */
-  int rc = srukf_set_scale(ukf, 1e-12, 2.0, 0.0);
-  assert(rc == SRUKF_RETURN_OK);
   assert(ukf->wm && ukf->wc);
 
   srukf_index n = ukf->x->n_rows;
 
-  /* Compute λ the same way as srukf_set_scale() does: */
-  srukf_value lambda = 1e-12 * 1e-12 * ((srukf_value)n + 0.0) - (srukf_value)n;
-  const srukf_value eps = 1e-12;
-  if (fabs((double)(n + lambda)) < eps)
-    lambda = -(srukf_value)n + eps; /* same clamp as in srukf_set_scale() */
+  /* Establish known-good weights first. */
+  int rc = srukf_set_scale(ukf, 0.5, 2.0, 0.0);
+  assert(rc == SRUKF_RETURN_OK);
+  srukf_value wm0_before = ukf->wm[0];
+  srukf_value alpha_before = ukf->alpha;
 
-  /* Allocate expected weight vectors. */
+  /* α = 1e-12 gives n + λ = 6e-24, far below double precision. */
+  rc = srukf_set_scale(ukf, 1e-12, 2.0, 0.0);
+  assert(rc == SRUKF_RETURN_MATH_ERROR);
+
+  /* The failed call must not have disturbed parameters or weights. */
+  assert(ukf->alpha == alpha_before);
+  assert(ukf->wm[0] == wm0_before);
+
+  /* A small-but-representable α still works and matches the formulas. */
+  rc = srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  assert(rc == SRUKF_RETURN_OK);
+
+  srukf_value lambda = lambda_from(1e-3, 0.0, n);
   srukf_value *wm_exp = calloc(2 * n + 1, sizeof(srukf_value));
   srukf_value *wc_exp = calloc(2 * n + 1, sizeof(srukf_value));
-  expected_weights(lambda, 1e-12, 2.0, n, wm_exp, wc_exp);
+  expected_weights(lambda, 1e-3, 2.0, n, wm_exp, wc_exp);
 
-  /* Compare the filter's weights against the expected values. */
   for (srukf_index i = 0; i < 2 * n + 1; ++i) {
     assert(fabs(ukf->wm[i] - wm_exp[i]) < 1e-12);
     assert(fabs(ukf->wc[i] - wc_exp[i]) < 1e-12);

@@ -1,5 +1,5 @@
-#ifndef _SRUKF_H_
-#define _SRUKF_H_
+#ifndef SRUKF_H
+#define SRUKF_H
 
 /**
  * @file srukf.h
@@ -124,12 +124,11 @@
  *
  * The UKF has three tuning parameters (\f$\alpha, \beta, \kappa\f$):
  *
- * | Parameter | Typical Value | Effect |
- * |-----------|---------------|--------|
- * | \f$\alpha\f$ | 0.001 - 1 | Controls sigma point spread. Smaller = tighter
- * around mean | | \f$\beta\f$  | 2.0 | Prior knowledge of distribution. 2.0 is
- * optimal for Gaussian | | \f$\kappa\f$ | 0 or 3-N | Secondary scaling. Often
- * set to 0 or to ensure \f$N + \kappa = 3\f$ |
+ * | Parameter    | Typical Value | Effect                                                        |
+ * |--------------|---------------|---------------------------------------------------------------|
+ * | \f$\alpha\f$ | 0.001 - 1     | Controls sigma point spread. Smaller = tighter around mean    |
+ * | \f$\beta\f$  | 2.0           | Prior knowledge of distribution. 2.0 is optimal for Gaussian  |
+ * | \f$\kappa\f$ | 0 or 3-N      | Secondary scaling. Often chosen so \f$N + \kappa = 3\f$; must satisfy \f$N + \kappa > 0\f$ |
  *
  * The derived parameter \f$\lambda = \alpha^2(N + \kappa) - N\f$ determines
  * the actual spread. For small \f$\alpha\f$, \f$\lambda \approx -N\f$, which
@@ -166,13 +165,18 @@
  *
  * @section thread_safety_sec Thread Safety
  *
- * This library is **NOT thread-safe**:
- * - The diagnostic callback (srukf_set_diag_callback()) is global
- * - Each srukf instance should only be accessed from one thread
+ * Each srukf instance must only be accessed from one thread at a time.
+ * Distinct instances may be used concurrently from different threads,
+ * provided each instance uses a per-instance diagnostic handler
+ * (srukf_set_diag()). The legacy global callback
+ * (srukf_set_diag_callback()) is shared by all instances and is only
+ * safe when set once before threads start.
  *
  * @section dependencies_sec Dependencies
  *
- * Requires CBLAS and LAPACKE (e.g., OpenBLAS).
+ * The implementation requires CBLAS and LAPACKE (e.g., OpenBLAS) at link
+ * time. This header does not include their headers; consumers need no
+ * BLAS/LAPACK development headers to compile against the library.
  *
  * @section attribution_sec Attribution
  *
@@ -189,14 +193,37 @@
  *   Nonlinear Estimation"
  */
 
-#include <assert.h>
-#include <stdbool.h>
 #include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
 
-#include <cblas.h>
-#include <lapacke.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*============================================================================
+ * @defgroup version Library Version
+ * @brief Compile-time and runtime version identification
+ * @{
+ *============================================================================*/
+
+/** @brief Major version: incremented on incompatible API changes */
+#define SRUKF_VERSION_MAJOR 1
+/** @brief Minor version: incremented on backward-compatible additions */
+#define SRUKF_VERSION_MINOR 1
+/** @brief Patch version: incremented on backward-compatible fixes */
+#define SRUKF_VERSION_PATCH 0
+/** @brief Version string "major.minor.patch" */
+#define SRUKF_VERSION "1.1.0"
+
+/**
+ * @brief Runtime version of the linked library
+ *
+ * @return Static string identical to the SRUKF_VERSION the library was
+ *         built with. Compare against your compile-time SRUKF_VERSION to
+ *         detect header/library mismatches.
+ */
+const char *srukf_version(void);
+
+/** @} */ /* end of version group */
 
 /*============================================================================
  * @defgroup matrix Matrix Types and Utilities
@@ -309,26 +336,6 @@ typedef struct {
  */
 #define SRUKF_LEADING_DIM(A) ((A)->n_rows)
 
-/** @brief BLAS layout constant */
-#define SRUKF_CBLAS_LAYOUT CblasColMajor
-/** @brief LAPACK layout constant */
-#define SRUKF_LAPACK_LAYOUT LAPACK_COL_MAJOR
-
-/* BLAS/LAPACK routine selection based on precision */
-#ifdef SRUKF_SINGLE
-#define SRUKF_GEMM  cblas_sgemm    /**< Matrix multiply (single) */
-#define SRUKF_TRSM  cblas_strsm    /**< Triangular solve (single) */
-#define SRUKF_TRSV  cblas_strsv    /**< Triangular vector solve (single) */
-#define SRUKF_GEQRF LAPACKE_sgeqrf /**< QR factorization (single) */
-#define SRUKF_POTRF LAPACKE_spotrf /**< Cholesky factorization (single) */
-#else
-#define SRUKF_GEMM  cblas_dgemm    /**< Matrix multiply (double) */
-#define SRUKF_TRSM  cblas_dtrsm    /**< Triangular solve (double) */
-#define SRUKF_TRSV  cblas_dtrsv    /**< Triangular vector solve (double) */
-#define SRUKF_GEQRF LAPACKE_dgeqrf /**< QR factorization (double) */
-#define SRUKF_POTRF LAPACKE_dpotrf /**< Cholesky factorization (double) */
-#endif
-
 /**
  * @brief Allocate a matrix
  *
@@ -438,6 +445,15 @@ typedef struct {
   /** @} */
 
   srukf_workspace *ws; /**< Pre-allocated workspace (allocated on demand) */
+
+  /** @name Diagnostics
+   *  Per-instance diagnostic handler (see srukf_set_diag()).
+   *  When diag_fn is NULL, the global callback (if any) is used instead.
+   *  @{
+   */
+  void (*diag_fn)(const char *msg, void *ctx); /**< Handler, or NULL */
+  void *diag_ctx;                              /**< Opaque context for diag_fn */
+  /** @} */
 } srukf;
 
 /*----------------------------------------------------------------------------
@@ -475,6 +491,36 @@ typedef void (*srukf_diag_fn)(const char *msg);
  * @endcode
  */
 void srukf_set_diag_callback(srukf_diag_fn fn);
+
+/**
+ * @brief Per-instance diagnostic handler type
+ *
+ * Like srukf_diag_fn, but receives an opaque context pointer, allowing
+ * one handler to serve multiple filter instances (e.g., tagging messages
+ * with a filter name, or routing to a per-thread log).
+ *
+ * @param msg Null-terminated diagnostic message
+ * @param ctx Context pointer supplied to srukf_set_diag()
+ */
+typedef void (*srukf_diag_handler)(const char *msg, void *ctx);
+
+/**
+ * @brief Set a per-instance diagnostic handler
+ *
+ * When set, diagnostics from this filter instance are delivered to @p fn
+ * instead of the global callback. Pass NULL to clear the handler and fall
+ * back to the global callback.
+ *
+ * Unlike srukf_set_diag_callback(), this is safe to use with multiple
+ * filter instances across threads (each instance carries its own handler).
+ *
+ * @param ukf Filter instance
+ * @param fn Handler function, or NULL to clear
+ * @param ctx Opaque pointer passed through to fn
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if ukf
+ *         is NULL
+ */
+srukf_return srukf_set_diag(srukf *ukf, srukf_diag_handler fn, void *ctx);
 
 /** @} */ /* end of diagnostics group */
 
@@ -566,12 +612,17 @@ srukf_return srukf_set_noise(srukf *ukf, const srukf_mat *Qsqrt,
  * the filter captures nonlinear effects.
  *
  * @param ukf Filter instance
- * @param alpha Spread of sigma points around mean (must be > 0, typically 1e-3
- * to 1)
- * @param beta Prior knowledge of distribution (2.0 is optimal for Gaussian)
- * @param kappa Secondary scaling parameter (typically 0 or 3-N)
- * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if alpha <=
- * 0
+ * @param alpha Spread of sigma points around mean (must be finite and > 0,
+ * typically 1e-3 to 1)
+ * @param beta Prior knowledge of distribution (must be finite; 2.0 is
+ * optimal for Gaussian)
+ * @param kappa Secondary scaling parameter (must be finite and satisfy
+ * N + kappa > 0; typically 0 or 3-N)
+ * @return SRUKF_RETURN_OK on success. SRUKF_RETURN_PARAMETER_ERROR if any
+ * parameter is NaN/Inf, alpha <= 0, or N + kappa <= 0.
+ * SRUKF_RETURN_MATH_ERROR if the resulting weight denominator
+ * \f$\alpha^2(N+\kappa)\f$ underflows the working precision. On error the
+ * previous parameters and weights are preserved.
  *
  * **Derived parameters:**
  * - \f$\lambda = \alpha^2 (N + \kappa) - N\f$
@@ -668,9 +719,10 @@ srukf_return srukf_set_sqrt_cov(srukf *ukf, const srukf_mat *S_in);
  * Useful for reinitializing a filter without reallocating.
  *
  * @param ukf Filter instance
- * @param init_std Initial standard deviation (> 0). The sqrt-covariance
- *                 is set to `init_std * I`.
- * @return SRUKF_RETURN_OK on success
+ * @param init_std Initial standard deviation (finite and > 0). The
+ *                 sqrt-covariance is set to `init_std * I`.
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if
+ *         init_std is NaN, Inf, or <= 0
  *
  * **Interpretation:** After reset, each state variable has zero mean and
  * variance `init_std^2`, with no correlation between variables.
@@ -686,16 +738,23 @@ srukf_return srukf_reset(srukf *ukf, srukf_value init_std);
  *----------------------------------------------------------------------------*/
 
 /**
- * @brief Process model callback type
+ * @brief Model callback type (process and measurement models)
  *
- * User-provided function implementing the state transition model:
- * \f$x_{k+1} = f(x_k)\f$
+ * User-provided function evaluated at each sigma point. Used for both:
+ * - **Process models** \f$x_{k+1} = f(x_k)\f$, where the output is the
+ *   next state (N x 1)
+ * - **Measurement models** \f$z = h(x)\f$, where the output is the
+ *   predicted measurement (M x 1)
  *
  * @param x_in Current state (N x 1), read-only
- * @param x_out Next state (N x 1), write output here
- * @param user User data pointer (passed through from predict call)
+ * @param out Output vector (N x 1 for process, M x 1 for measurement)
+ * @param user User data pointer (passed through from predict/correct)
  *
- * Example (constant velocity model):
+ * If the model cannot produce a valid output, write NaN into @p out; the
+ * filter detects non-finite values and fails the step with
+ * SRUKF_RETURN_MATH_ERROR, leaving the state unchanged.
+ *
+ * Example (constant velocity process model):
  * @code
  * void process_model(const srukf_mat *x_in, srukf_mat *x_out, void *user) {
  *     double dt = *(double*)user;
@@ -703,30 +762,19 @@ srukf_return srukf_reset(srukf *ukf, srukf_value init_std);
  *     SRUKF_ENTRY(x_out, 0, 0) = SRUKF_ENTRY(x_in, 0, 0)
  *                              + dt * SRUKF_ENTRY(x_in, 1, 0);
  *     SRUKF_ENTRY(x_out, 1, 0) = SRUKF_ENTRY(x_in, 1, 0);  // velocity
- * unchanged
  * }
  * @endcode
- */
-
-/**
- * @brief Measurement model callback type
  *
- * User-provided function implementing the measurement model:
- * \f$z = h(x)\f$
- *
- * @param x_in Current state (N x 1), read-only
- * @param z_out Predicted measurement (M x 1), write output here
- * @param user User data pointer (passed through from correct call)
- *
- * Example (observe position only):
+ * Example (measurement model observing position only):
  * @code
  * void meas_model(const srukf_mat *x_in, srukf_mat *z_out, void *user) {
  *     (void)user;
- *     // We only measure position (first state variable)
  *     SRUKF_ENTRY(z_out, 0, 0) = SRUKF_ENTRY(x_in, 0, 0);
  * }
  * @endcode
  */
+typedef void (*srukf_model_fn)(const srukf_mat *x_in, srukf_mat *out,
+                               void *user);
 
 /**
  * @brief Predict step: propagate state through process model
@@ -739,6 +787,10 @@ srukf_return srukf_reset(srukf *ukf, srukf_value init_std);
  * @param user User data passed to f
  * @return SRUKF_RETURN_OK on success. On error, filter state is unchanged.
  *
+ * @note Requires noise matrices: if the filter was created with
+ *       srukf_create(), you must call srukf_set_noise() first;
+ *       otherwise SRUKF_RETURN_PARAMETER_ERROR is returned.
+ *
  * **Algorithm:**
  * 1. Generate 2N+1 sigma points from current (x, S)
  * 2. Propagate each sigma point through f
@@ -747,9 +799,7 @@ srukf_return srukf_reset(srukf *ukf, srukf_value init_std);
  *
  * @see srukf_correct
  */
-srukf_return srukf_predict(srukf *ukf,
-                           void (*f)(const srukf_mat *, srukf_mat *, void *),
-                           void *user);
+srukf_return srukf_predict(srukf *ukf, srukf_model_fn f, void *user);
 
 /**
  * @brief Correct step: incorporate measurement
@@ -777,17 +827,85 @@ srukf_return srukf_predict(srukf *ukf,
  * small and we mostly keep our prediction. If Syy is large (uncertain
  * prediction), K is large and we trust the measurement more.
  *
- * @see srukf_predict
+ * @note Requires noise matrices: if the filter was created with
+ *       srukf_create(), you must call srukf_set_noise() first;
+ *       otherwise SRUKF_RETURN_PARAMETER_ERROR is returned.
+ *
+ * @see srukf_predict, srukf_get_innovation, srukf_get_nis
  */
-srukf_return srukf_correct(srukf *ukf, srukf_mat *z,
-                           void (*h)(const srukf_mat *, srukf_mat *, void *),
+srukf_return srukf_correct(srukf *ukf, const srukf_mat *z, srukf_model_fn h,
                            void *user);
 
 /** @} */ /* end of operations group */
 
 /*----------------------------------------------------------------------------
+ * @defgroup innovation Innovation Access
+ * @brief Inspecting the most recent measurement update
+ *
+ * After a successful srukf_correct() or srukf_correct_to(), the filter
+ * retains the innovation (measurement residual) and its sqrt-covariance.
+ * These enable measurement gating and filter health monitoring: a filter
+ * whose normalized innovation squared (NIS) is persistently far from its
+ * expected chi-square distribution (M degrees of freedom) is mistuned.
+ *
+ * The values reflect the most recent *successful* correct step and remain
+ * readable until the next correct call or until the workspace is freed.
+ * @{
+ *----------------------------------------------------------------------------*/
+
+/**
+ * @brief Get the innovation from the last correct step
+ *
+ * The innovation is \f$\nu = z - \bar{z}\f$: the difference between the
+ * actual and predicted measurement.
+ *
+ * @param ukf Filter instance
+ * @param innov_out Output buffer (M x 1), must be pre-allocated
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if no
+ *         successful correct step has been performed yet
+ */
+srukf_return srukf_get_innovation(const srukf *ukf, srukf_mat *innov_out);
+
+/**
+ * @brief Get the innovation sqrt-covariance from the last correct step
+ *
+ * Copies \f$S_{yy}\f$ (M x M, lower triangular) where the innovation
+ * covariance is \f$P_{yy} = S_{yy} S_{yy}^T\f$.
+ *
+ * @param ukf Filter instance
+ * @param Syy_out Output buffer (M x M), must be pre-allocated
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if no
+ *         successful correct step has been performed yet
+ */
+srukf_return srukf_get_innovation_sqrt_cov(const srukf *ukf,
+                                           srukf_mat *Syy_out);
+
+/**
+ * @brief Get the normalized innovation squared (NIS) of the last correct
+ *
+ * Computes \f$\nu^T P_{yy}^{-1} \nu\f$ via a triangular solve against
+ * \f$S_{yy}\f$. Under correct filter tuning, NIS follows a chi-square
+ * distribution with M degrees of freedom, so e.g. for M = 1 roughly 95%
+ * of values should fall below 3.84. Use this for outlier gating: compute
+ * NIS *before* accepting a measurement by running correct on a scratch
+ * copy via srukf_correct_to(), or monitor it after the fact.
+ *
+ * @param ukf Filter instance
+ * @param nis_out Output scalar
+ * @return SRUKF_RETURN_OK on success, SRUKF_RETURN_PARAMETER_ERROR if no
+ *         successful correct step has been performed yet
+ */
+srukf_return srukf_get_nis(const srukf *ukf, srukf_value *nis_out);
+
+/** @} */ /* end of innovation group */
+
+/*----------------------------------------------------------------------------
  * @defgroup transactional Transactional Operations
  * @brief Advanced: operate on external state buffers
+ *
+ * These variants are **atomic** with respect to the user buffers: the
+ * step is computed entirely in the filter's workspace and committed to
+ * @p x and @p S only on success. On any error the buffers are unchanged.
  * @{
  *----------------------------------------------------------------------------*/
 
@@ -801,15 +919,14 @@ srukf_return srukf_correct(srukf *ukf, srukf_mat *z,
  * - Custom rollback/checkpoint schemes
  *
  * @param ukf Filter instance (provides parameters and workspace)
- * @param x State vector (N x 1), modified in-place
- * @param S Sqrt-covariance (N x N), modified in-place
+ * @param x State vector (N x 1), modified in-place on success
+ * @param S Sqrt-covariance (N x N), modified in-place on success
  * @param f Process model function
  * @param user User data passed to f
- * @return SRUKF_RETURN_OK on success
+ * @return SRUKF_RETURN_OK on success. On error, x and S are unchanged.
  */
 srukf_return srukf_predict_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
-                              void (*f)(const srukf_mat *, srukf_mat *, void *),
-                              void *user);
+                              srukf_model_fn f, void *user);
 
 /**
  * @brief Transactional correct: operate on external buffers
@@ -817,16 +934,15 @@ srukf_return srukf_predict_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
  * Like srukf_correct(), but reads/writes state from user-provided buffers.
  *
  * @param ukf Filter instance (provides parameters and workspace)
- * @param x State vector (N x 1), modified in-place
- * @param S Sqrt-covariance (N x N), modified in-place
+ * @param x State vector (N x 1), modified in-place on success
+ * @param S Sqrt-covariance (N x N), modified in-place on success
  * @param z Measurement vector (M x 1)
  * @param h Measurement model function
  * @param user User data passed to h
- * @return SRUKF_RETURN_OK on success
+ * @return SRUKF_RETURN_OK on success. On error, x and S are unchanged.
  */
 srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
-                              srukf_mat *z,
-                              void (*h)(const srukf_mat *, srukf_mat *, void *),
+                              const srukf_mat *z, srukf_model_fn h,
                               void *user);
 
 /** @} */ /* end of transactional group */
@@ -840,7 +956,9 @@ srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
 /**
  * @brief Pre-allocate workspace
  *
- * The workspace holds temporary matrices used during predict/correct.
+ * The workspace holds temporary matrices used during predict/correct,
+ * including the LAPACK QR work buffer, so a filter with an allocated
+ * workspace performs **no heap allocation** during predict/correct.
  * By default, it's allocated on first use. Call this to allocate it
  * explicitly (e.g., during initialization to avoid allocation during
  * real-time operation).
@@ -869,4 +987,8 @@ void srukf_free_workspace(srukf *ukf);
 
 /** @} */ /* end of workspace group */
 
-#endif /* _SRUKF_H_ */
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* SRUKF_H */

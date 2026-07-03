@@ -342,10 +342,30 @@ static void test_predict_to(void) {
   printf("  test_predict_to      OK\n");
 }
 
+/* The numerical guards must scale with the working precision. In float,
+ * a weight denominator of alpha^2 * (n + kappa) = 1e-8 is representable
+ * but far below meaningful precision (float epsilon ~1.2e-7); accepting
+ * it produces garbage weights. A double build accepts these parameters;
+ * a float build must reject them. */
+static void test_scale_underflow_single(void) {
+  srukf *ukf = srukf_create(1, 1);
+  assert(ukf);
+
+  srukf_return rc = srukf_set_scale(ukf, 1e-4f, 2.0f, 0.0f);
+  assert(rc != SRUKF_RETURN_OK);
+
+  /* a precision-appropriate alpha still works */
+  assert(srukf_set_scale(ukf, 1e-2f, 2.0f, 0.0f) == SRUKF_RETURN_OK);
+
+  srukf_free(ukf);
+  printf("  test_scale_underflow OK\n");
+}
+
 int main(void) {
   printf("Running single-precision (float) tests...\n");
 
   test_type_size();
+  test_scale_underflow_single();
   test_basic_create();
   test_basic_predict();
   test_basic_correct();

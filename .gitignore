@@ -1,5 +1,9 @@
 bin
 *.so
+*.so.*
+*.a
+srukf.o
+srukf.pc
 tests-output.txt
 
 # Coverage artifacts

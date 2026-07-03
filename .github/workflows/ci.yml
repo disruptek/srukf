@@ -210,6 +210,29 @@ jobs:
           name: coverage-report
           path: coverage-report/
 
+  # Guard against make/CMake drift: both systems derive their test list
+  # from tests/ by convention, so they must agree on the test count.
+  test-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapacke-dev
+
+      - name: Configure CMake
+        run: cmake -S . -B build
+
+      - name: Compare test counts
+        run: |
+          MAKE_COUNT=$(make count-tests)
+          CTEST_COUNT=$(ctest --test-dir build -N | sed -n 's/^Total Tests: //p')
+          echo "make: $MAKE_COUNT tests, ctest: $CTEST_COUNT tests"
+          test -n "$MAKE_COUNT" && test "$MAKE_COUNT" = "$CTEST_COUNT"
+
   # CMake build testing
   cmake-build:
     runs-on: ubuntu-latest

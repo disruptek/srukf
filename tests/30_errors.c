@@ -450,6 +450,86 @@ static void test_create_from_noise_errors(void) {
   printf("  test_create_noise    OK\n");
 }
 
+/* Test: predict/correct before set_noise must fail cleanly, not crash.
+ * srukf_create() leaves Qsqrt/Rsqrt without data buffers; the filter must
+ * refuse to operate until srukf_set_noise() supplies them. */
+static void test_missing_noise(void) {
+  srukf *ukf = srukf_create(3, 2);
+  assert(ukf);
+
+  srukf_return rc = srukf_predict(ukf, process, NULL);
+  assert(rc == SRUKF_RETURN_PARAMETER_ERROR);
+
+  srukf_mat *z = SRUKF_MAT_ALLOC(2, 1);
+  assert(z);
+  rc = srukf_correct(ukf, z, meas, NULL);
+  assert(rc == SRUKF_RETURN_PARAMETER_ERROR);
+
+  /* the same filter must become fully usable once noise is supplied */
+  srukf_mat *Q = alloc_unit_square(3);
+  srukf_mat *R = alloc_unit_square(2);
+  assert(Q && R);
+  assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  assert(srukf_predict(ukf, process, NULL) == SRUKF_RETURN_OK);
+  assert(srukf_correct(ukf, z, meas, NULL) == SRUKF_RETURN_OK);
+
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+  srukf_mat_free(z);
+  srukf_free(ukf);
+  printf("  test_missing_noise   OK\n");
+}
+
+/* Test: non-finite scale parameters must be rejected and must preserve
+ * the previous parameters and weights. NaN famously survives `<= 0`
+ * checks, so these guard against silent filter poisoning. */
+static void test_scale_nonfinite(void) {
+  srukf *ukf = srukf_create(3, 2);
+  assert(ukf);
+
+  srukf_value alpha = ukf->alpha, beta = ukf->beta, kappa = ukf->kappa;
+  srukf_value wm0 = ukf->wm[0];
+
+  assert(srukf_set_scale(ukf, NAN, 2.0, 0.0) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 0.5, NAN, 0.0) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 0.5, 2.0, NAN) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, INFINITY, 2.0, 0.0) ==
+         SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 0.5, INFINITY, 0.0) ==
+         SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 0.5, 2.0, -INFINITY) ==
+         SRUKF_RETURN_PARAMETER_ERROR);
+
+  /* N + kappa <= 0 requires the sqrt of a non-positive number; it must
+   * be rejected rather than smuggling NaN into alpha via the old
+   * lambda-clamping path. */
+  assert(srukf_set_scale(ukf, 1e-7, 2.0, -4.0) ==
+         SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_set_scale(ukf, 0.5, 2.0, -3.0) ==
+         SRUKF_RETURN_PARAMETER_ERROR);
+
+  /* previous parameters and weights survive all the failed calls */
+  assert(ukf->alpha == alpha && ukf->beta == beta && ukf->kappa == kappa);
+  assert(ukf->wm[0] == wm0);
+  assert(isfinite(ukf->wm[0]) && isfinite(ukf->wc[0]));
+
+  srukf_free(ukf);
+  printf("  test_scale_nonfinite OK\n");
+}
+
+/* Test: non-finite reset std must be rejected */
+static void test_reset_nonfinite(void) {
+  srukf *ukf = srukf_create(2, 1);
+  assert(ukf);
+
+  assert(srukf_reset(ukf, NAN) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_reset(ukf, INFINITY) == SRUKF_RETURN_PARAMETER_ERROR);
+  assert(srukf_reset(ukf, 1.0) == SRUKF_RETURN_OK);
+
+  srukf_free(ukf);
+  printf("  test_reset_nonfinite OK\n");
+}
+
 int main(void) {
   printf("Running error handling tests...\n");
 
@@ -464,6 +544,9 @@ int main(void) {
   test_is_spd();
   test_callback_validation();
   test_create_from_noise_errors();
+  test_missing_noise();
+  test_scale_nonfinite();
+  test_reset_nonfinite();
 
   printf("error handling tests passed.\n");
   return 0;

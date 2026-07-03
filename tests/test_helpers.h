@@ -12,6 +12,23 @@
 
 #include "srukf.h"
 
+/* The public header no longer drags in BLAS/LAPACK; the helpers below
+ * need them directly. Internal tests get these macros from srukf.c;
+ * define them here for any test that links the library instead. */
+#ifndef SRUKF_GEMM
+#include <cblas.h>
+#include <lapacke.h>
+#define SRUKF_CBLAS_LAYOUT CblasColMajor
+#define SRUKF_LAPACK_LAYOUT LAPACK_COL_MAJOR
+#ifdef SRUKF_SINGLE
+#define SRUKF_GEMM cblas_sgemm
+#define SRUKF_POTRF LAPACKE_spotrf
+#else
+#define SRUKF_GEMM cblas_dgemm
+#define SRUKF_POTRF LAPACKE_dpotrf
+#endif
+#endif /* SRUKF_GEMM */
+
 #define TEST_EPS 1e-12
 
 /* Check if matrix A is symmetric (to given precision in significant digits). */
