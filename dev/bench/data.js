@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783056131616,
+  "lastUpdate": 1783104900465,
   "repoUrl": "https://github.com/disruptek/srukf",
   "entries": {
     "Benchmark": [
@@ -863,6 +863,150 @@ window.BENCHMARK_DATA = {
           {
             "name": "nonlin/correct_to",
             "value": 2.495,
+            "unit": "us"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "disruptek@users.noreply.github.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "428a1e0e54f652f8994ec5bc4967680a9760f75b",
+          "message": "v2.0.0: fix numerical-core bugs, opaque struct, custom-space hooks\n\nNumerical core:\n- chol_downdate_rank1 divided by zero on exact cancellation (r2 == 0),\n  writing -inf into S and returning OK; it now rejects any r2 below\n  SRUKF_EPS * Sjj^2, covering the silent-amplification near-miss too.\n- The absolute Syy < eps test silently discarded measurements and could\n  starve filters operating at tiny scales; replaced with a\n  scale-invariant singularity check that fails loudly (MATH_ERROR).\n- Predict/correct validate outputs for finiteness before committing, so\n  numerical escapes can never be reported as success.\n\nAPI:\n- The srukf struct is opaque; all access via accessors (new:\n  srukf_get_scale). Kills the bindings-layout fragility class.\n- srukf_set_state_ops/srukf_set_meas_ops register mean/residual hooks\n  for non-Euclidean spaces (angles across the +/-pi wrap).\n- srukf_set_noise copies in place once buffers exist: per-step adaptive\n  noise preserves the zero-allocation guarantee.\n- New SRUKF_RETURN_MEMORY_ERROR distinguishes OOM from bad parameters;\n  srukf_mat_alloc rejects zero dims and size_t overflow.\n\nStructure and docs:\n- srukf.c is an umbrella over eleven focused parts in src/ (same single\n  translation unit; the #include \"srukf.c\" test convention and both\n  build systems are unchanged). Include order is guarded from\n  clang-format's include sorting.\n- README/QUICKSTART/docs brought current: accessor-based examples,\n  compact API index, documented creation defaults, corrected workspace\n  and aliasing claims. Stale .gitmodules entry and the unexplained QR\n  workspace padding row removed.\n\nTests: new counterfactual-verified regressions for the downdate and\nSyy cases, deterministic OOM via calloc interposition, an angle-wrap\nsuite for the hooks (50_hooks.c), and the duplicate weights test merged\n(01 into 02). 16 C tests pass under make and CMake, 64 Python tests\npass, ASan+UBSan clean.",
+          "timestamp": "2026-07-03T14:54:26-04:00",
+          "tree_id": "cfd7b19cd115c12f5c3f041464bda8e2f495a8c0",
+          "url": "https://github.com/disruptek/srukf/commit/428a1e0e54f652f8994ec5bc4967680a9760f75b"
+        },
+        "date": 1783104900217,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "3x2/predict",
+            "value": 1.381,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/predict_to",
+            "value": 1.366,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct",
+            "value": 2.435,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct_to",
+            "value": 2.439,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict",
+            "value": 3.089,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict_to",
+            "value": 1.745,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct",
+            "value": 2.455,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct_to",
+            "value": 2.516,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict",
+            "value": 3.558,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict_to",
+            "value": 3.455,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct",
+            "value": 4.766,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct_to",
+            "value": 4.701,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict",
+            "value": 6.83,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict_to",
+            "value": 6.794,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct",
+            "value": 9.451,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct_to",
+            "value": 9.476,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict",
+            "value": 11.112,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict_to",
+            "value": 10.939,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct",
+            "value": 15.388,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct_to",
+            "value": 15.374,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict",
+            "value": 2.498,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict_to",
+            "value": 2.491,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct",
+            "value": 2.376,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct_to",
+            "value": 2.38,
             "unit": "us"
           }
         ]
