@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775831776151,
+  "lastUpdate": 1783056131616,
   "repoUrl": "https://github.com/disruptek/srukf",
   "entries": {
     "Benchmark": [
@@ -719,6 +719,150 @@ window.BENCHMARK_DATA = {
           {
             "name": "nonlin/correct_to",
             "value": 2.756,
+            "unit": "us"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "disruptek@users.noreply.github.com",
+            "name": "Smooth Operator",
+            "username": "disruptek"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f840e4e13e589cab1a987803a3e23b8fd98d16a",
+          "message": "Fix crash/UB bugs, harden validation, add innovation API, unify builds\n\nBug fixes, each with a counter-factual test that failed first:\n- predict/correct before set_noise returned garbage via NULL Qsqrt/Rsqrt\n  data deref (verified SEGV); now PARAMETER_ERROR.\n- set_scale accepted NaN/Inf and, via the lambda-clamp path, could store\n  alpha = -nan for kappa < -N; now validates finiteness, alpha > 0,\n  N + kappa > 0, rejects precision underflow, and preserves prior\n  parameters/weights on failure. reset likewise rejects non-finite std.\n- srukf_init double-freed matrices on OOM paths (freed without NULLing,\n  then srukf_free freed again) and copied into unchecked allocations.\n- All predict/correct variants are now transactional: results stage in\n  dedicated workspace buffers and commit only on success. Previously a\n  mid-downdate failure left correct_to's user buffers corrupted, and\n  srukf_predict/correct relied on accidental memcpy(src==dst) aliasing.\n\nHot path and portability:\n- QR uses LAPACKE_*geqrf_work with a workspace-owned buffer sized once;\n  tests/49_zeroalloc.c interposes malloc and certifies zero heap\n  allocations across steady-state predict/correct (LAPACKE's\n  convenience wrapper was allocating twice per step).\n- Cross-covariance is one GEMM, weighted mean a GEMV.\n- Public header: extern \"C\" guards (tests/90_cpp_linkage.cpp), no more\n  cblas.h/lapacke.h leakage, unreserved include guard, SRUKF_VERSION_*\n  macros plus runtime srukf_version(). SRUKF_EPS scales with precision\n  (1e-6f for float builds; guards previously never fired there).\n\nAPI additions:\n- srukf_model_fn typedef, const measurement in correct, per-instance\n  diagnostics (srukf_set_diag with context), and innovation accessors\n  (srukf_get_innovation / _sqrt_cov / _nis) for gating and health\n  monitoring, gated so stale values are never readable.\n- Python: model-callback exceptions are contained (NaN-poisoned output,\n  original exception re-raised; ctypes previously swallowed them and\n  the filter silently absorbed stale buffers), plus lib_version() and\n  innovation/innovation_sqrt_cov/nis properties.\n\nBuild unification by convention:\n- Both build systems derive the test list from tests/*.c and classify\n  internal tests by their '#include \"srukf.c\"' line; adding a test\n  needs no build edits. Single-precision is self-defined by the test.\n- srukf.h owns the version; CMake and make parse it. All packaging\n  metadata bumped to 1.1.0.\n- Makefile resolves deps via pkg-config (cblas -> blas -> openblas,\n  static fallback), builds libsrukf.a, sets a versioned soname, and\n  installs an ldconfig-style layout with srukf.pc and DESTDIR support.\n- New CI test-parity job fails if make and ctest disagree on the test\n  count.\n\nTesting: 16/16 via make and CTest, ASan/UBSan clean, 64/64 pytest,\ndownstream consumption verified via both find_package and pkg-config.",
+          "timestamp": "2026-07-03T01:21:22-04:00",
+          "tree_id": "d8fe81af966ce1bb93d28b871c80d0e11cc24678",
+          "url": "https://github.com/disruptek/srukf/commit/1f840e4e13e589cab1a987803a3e23b8fd98d16a"
+        },
+        "date": 1783056130824,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "3x2/predict",
+            "value": 1.345,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/predict_to",
+            "value": 1.437,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct",
+            "value": 2.397,
+            "unit": "us"
+          },
+          {
+            "name": "3x2/correct_to",
+            "value": 2.429,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict",
+            "value": 3.038,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/predict_to",
+            "value": 2.156,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct",
+            "value": 2.395,
+            "unit": "us"
+          },
+          {
+            "name": "6x3/correct_to",
+            "value": 2.408,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict",
+            "value": 3.376,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/predict_to",
+            "value": 3.361,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct",
+            "value": 4.756,
+            "unit": "us"
+          },
+          {
+            "name": "10x5/correct_to",
+            "value": 4.763,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict",
+            "value": 6.634,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/predict_to",
+            "value": 6.616,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct",
+            "value": 9.752,
+            "unit": "us"
+          },
+          {
+            "name": "15x8/correct_to",
+            "value": 9.768,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict",
+            "value": 10.669,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/predict_to",
+            "value": 10.6,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct",
+            "value": 15.816,
+            "unit": "us"
+          },
+          {
+            "name": "20x10/correct_to",
+            "value": 15.895,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict",
+            "value": 2.482,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/predict_to",
+            "value": 2.495,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct",
+            "value": 2.386,
+            "unit": "us"
+          },
+          {
+            "name": "nonlin/correct_to",
+            "value": 2.495,
             "unit": "us"
           }
         ]
