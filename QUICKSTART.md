@@ -85,6 +85,10 @@ int main(void) {
   SRUKF_ENTRY(R, 0, 0) = 0.5;   /* sensor noise std dev          */
   srukf_set_noise(ukf, Q, R);
 
+  /* Reusable buffers for the measurement and the estimate */
+  srukf_mat *z = srukf_mat_alloc(1, 1, 1);
+  srukf_mat *est = srukf_mat_alloc(2, 1, 1);
+
   /* Simulate 50 steps of a target moving at velocity = 1.0 */
   for (int t = 0; t < 50; t++) {
     double true_pos = t * dt * 1.0;
@@ -92,16 +96,17 @@ int main(void) {
 
     srukf_predict(ukf, process, &dt);
 
-    srukf_mat *z = srukf_mat_alloc(1, 1, 1);
     SRUKF_ENTRY(z, 0, 0) = noisy_pos;
     srukf_correct(ukf, z, measure, NULL);
-    srukf_mat_free(z);
 
+    srukf_get_state(ukf, est);
     printf("t=%4.1f  true=%6.2f  meas=%6.2f  est=%6.2f  vel=%5.2f\n",
            t * dt, true_pos, noisy_pos,
-           SRUKF_ENTRY(ukf->x, 0, 0), SRUKF_ENTRY(ukf->x, 1, 0));
+           SRUKF_ENTRY(est, 0, 0), SRUKF_ENTRY(est, 1, 0));
   }
 
+  srukf_mat_free(z);
+  srukf_mat_free(est);
   srukf_mat_free(Q);
   srukf_mat_free(R);
   srukf_free(ukf);

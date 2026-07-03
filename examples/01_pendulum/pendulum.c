@@ -338,12 +338,22 @@ static int run_simulation(const sim_config_t *cfg) {
    *
    * We assume we start with some uncertainty about the initial conditions.
    */
-  SRUKF_ENTRY(ukf->x, 0, 0) = cfg->initial_angle + add_noise(0.1);
-  SRUKF_ENTRY(ukf->x, 1, 0) = cfg->initial_velocity + add_noise(0.1);
+  srukf_mat *x0 = srukf_mat_alloc(2, 1, 1);
+  SRUKF_ENTRY(x0, 0, 0) = cfg->initial_angle + add_noise(0.1);
+  SRUKF_ENTRY(x0, 1, 0) = cfg->initial_velocity + add_noise(0.1);
+  srukf_set_state(ukf, x0);
+  srukf_mat_free(x0);
 
   /* Set initial uncertainty */
-  SRUKF_ENTRY(ukf->S, 0, 0) = 0.2;
-  SRUKF_ENTRY(ukf->S, 1, 1) = 0.2;
+  srukf_mat *S0 = srukf_mat_alloc(2, 2, 1);
+  SRUKF_ENTRY(S0, 0, 0) = 0.2;
+  SRUKF_ENTRY(S0, 1, 1) = 0.2;
+  srukf_set_sqrt_cov(ukf, S0);
+  srukf_mat_free(S0);
+
+  /* Reusable buffers for reading the estimate each step */
+  srukf_mat *x_est = srukf_mat_alloc(2, 1, 1);
+  srukf_mat *S_est = srukf_mat_alloc(2, 2, 1);
 
   /* ====================================================================
    * MAIN SIMULATION LOOP
@@ -416,11 +426,13 @@ static int run_simulation(const sim_config_t *cfg) {
      * 5. RECORD RESULTS
      * ============================================================== */
 
-    est_angle[step] = SRUKF_ENTRY(ukf->x, 0, 0);
-    est_velocity[step] = SRUKF_ENTRY(ukf->x, 1, 0);
+    srukf_get_state(ukf, x_est);
+    srukf_get_sqrt_cov(ukf, S_est);
+    est_angle[step] = SRUKF_ENTRY(x_est, 0, 0);
+    est_velocity[step] = SRUKF_ENTRY(x_est, 1, 0);
 
     /* Uncertainty (±1σ) for angle */
-    uncertainty[step] = SRUKF_ENTRY(ukf->S, 0, 0);
+    uncertainty[step] = SRUKF_ENTRY(S_est, 0, 0);
 
     /* Progress indicator */
     if (step % (n_steps / 10) == 0) {
@@ -495,6 +507,8 @@ static int run_simulation(const sim_config_t *cfg) {
   srukf_free(ukf);
   srukf_mat_free(Qsqrt);
   srukf_mat_free(Rsqrt);
+  srukf_mat_free(x_est);
+  srukf_mat_free(S_est);
   free(time);
   free(true_angle);
   free(true_velocity);

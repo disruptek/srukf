@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "SR-UKF: Square-Root Unscented Kalman Filter"
-version: 1.1.0
+version: 2.0.0
 date-released: 2026-02-06
 url: "https://github.com/disruptek/srukf"
 repository-code: "https://github.com/disruptek/srukf"

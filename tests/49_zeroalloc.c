@@ -33,14 +33,28 @@
 #include <stddef.h>
 
 extern void *__libc_malloc(size_t size);
+extern void *__libc_calloc(size_t nmemb, size_t size);
 
 static volatile int counting = 0;
 static volatile long alloc_count = 0;
+/* When set, every allocation fails: deterministic OOM for testing the
+ * SRUKF_RETURN_MEMORY_ERROR paths without fault-injection tooling. */
+static volatile int fail_alloc = 0;
 
 void *malloc(size_t size) {
   if (counting)
     ++alloc_count;
+  if (fail_alloc)
+    return NULL;
   return __libc_malloc(size);
+}
+
+void *calloc(size_t nmemb, size_t size) {
+  if (counting)
+    ++alloc_count;
+  if (fail_alloc)
+    return NULL;
+  return __libc_calloc(nmemb, size);
 }
 
 #include "srukf.c"
@@ -105,6 +119,31 @@ int main(void) {
     return 1;
   }
   printf("  test_zero_alloc      OK (0 allocations in %d steps)\n", STEPS);
+
+  /* Steady-state set_noise must copy in place: adaptive-noise users
+   * (time-varying Q/R) call it every step, so it is part of the
+   * zero-allocation guarantee once the buffers exist. */
+  counting = 1;
+  assert(srukf_set_noise(ukf, Q, R) == SRUKF_RETURN_OK);
+  counting = 0;
+  if (alloc_count != 0) {
+    printf("  FAILED: %ld heap allocations in steady-state set_noise\n",
+           alloc_count);
+    return 1;
+  }
+  printf("  test_zero_alloc_set_noise OK\n");
+
+  /* Deterministic OOM: allocation failures must surface as
+   * SRUKF_RETURN_MEMORY_ERROR (not PARAMETER_ERROR) and must leave the
+   * filter reusable once memory is available again. */
+  srukf_free_workspace(ukf);
+  fail_alloc = 1;
+  assert(srukf_alloc_workspace(ukf) == SRUKF_RETURN_MEMORY_ERROR);
+  assert(srukf_mat_alloc(4, 4, 1) == NULL);
+  fail_alloc = 0;
+  assert(srukf_alloc_workspace(ukf) == SRUKF_RETURN_OK);
+  assert(srukf_predict(ukf, process, NULL) == SRUKF_RETURN_OK);
+  printf("  test_alloc_failure   OK\n");
 
   srukf_mat_free(Q);
   srukf_mat_free(R);

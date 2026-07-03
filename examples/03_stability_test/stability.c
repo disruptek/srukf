@@ -217,12 +217,13 @@ static void measurement_model(const srukf_mat *x, srukf_mat *z,
 /**
  * Compute numerical health metrics from covariance square root S
  */
-static health_metrics_t compute_health(const srukf *ukf) {
+static health_metrics_t compute_health(const srukf_mat *x,
+                                       const srukf_mat *S) {
   health_metrics_t h = {0};
 
   /* Check for NaN/Inf in state */
   for (size_t i = 0; i < 4; i++) {
-    if (is_invalid(SRUKF_ENTRY(ukf->x, i, 0))) {
+    if (is_invalid(SRUKF_ENTRY(x, i, 0))) {
       h.has_nan = true;
       return h;
     }
@@ -231,7 +232,7 @@ static health_metrics_t compute_health(const srukf *ukf) {
   /* Compute covariance trace (sum of diagonal elements of S'*S) */
   h.cov_trace = 0.0;
   for (size_t i = 0; i < 4; i++) {
-    double s_ii = SRUKF_ENTRY(ukf->S, i, i);
+    double s_ii = SRUKF_ENTRY(S, i, i);
     if (is_invalid(s_ii)) {
       h.has_nan = true;
       return h;
@@ -242,14 +243,14 @@ static health_metrics_t compute_health(const srukf *ukf) {
   /* For Cholesky factor, determinant = product of diagonal elements squared */
   h.cov_det = 1.0;
   for (size_t i = 0; i < 4; i++) {
-    double s_ii = SRUKF_ENTRY(ukf->S, i, i);
+    double s_ii = SRUKF_ENTRY(S, i, i);
     h.cov_det *= s_ii * s_ii;
   }
 
   /* Positive definiteness: guaranteed by Cholesky, check diagonal > 0 */
   h.is_positive_def = true;
   for (size_t i = 0; i < 4; i++) {
-    if (SRUKF_ENTRY(ukf->S, i, i) <= 0.0) {
+    if (SRUKF_ENTRY(S, i, i) <= 0.0) {
       h.is_positive_def = false;
       break;
     }
@@ -259,7 +260,7 @@ static health_metrics_t compute_health(const srukf *ukf) {
   h.max_eigenvalue = 0.0;
   h.min_eigenvalue = DBL_MAX;
   for (size_t i = 0; i < 4; i++) {
-    double s_ii = SRUKF_ENTRY(ukf->S, i, i);
+    double s_ii = SRUKF_ENTRY(S, i, i);
     double eig = s_ii * s_ii;
     if (eig > h.max_eigenvalue)
       h.max_eigenvalue = eig;
@@ -280,15 +281,15 @@ static health_metrics_t compute_health(const srukf *ukf) {
 /**
  * Compute error metrics comparing estimate to ground truth
  */
-static error_metrics_t compute_errors(const srukf *ukf, double true_x,
-                                      double true_y, double true_vx,
-                                      double true_vy) {
+static error_metrics_t compute_errors(const srukf_mat *x, const srukf_mat *S,
+                                      double true_x, double true_y,
+                                      double true_vx, double true_vy) {
   error_metrics_t e = {0};
 
-  double ex = SRUKF_ENTRY(ukf->x, 0, 0) - true_x;
-  double ey = SRUKF_ENTRY(ukf->x, 1, 0) - true_y;
-  double evx = SRUKF_ENTRY(ukf->x, 2, 0) - true_vx;
-  double evy = SRUKF_ENTRY(ukf->x, 3, 0) - true_vy;
+  double ex = SRUKF_ENTRY(x, 0, 0) - true_x;
+  double ey = SRUKF_ENTRY(x, 1, 0) - true_y;
+  double evx = SRUKF_ENTRY(x, 2, 0) - true_vx;
+  double evy = SRUKF_ENTRY(x, 3, 0) - true_vy;
 
   e.position_rmse = sqrt(ex * ex + ey * ey);
   e.velocity_rmse = sqrt(evx * evx + evy * evy);
@@ -301,7 +302,7 @@ static error_metrics_t compute_errors(const srukf *ukf, double true_x,
    */
   double P_inv_diag[4];
   for (size_t i = 0; i < 4; i++) {
-    double s_ii = SRUKF_ENTRY(ukf->S, i, i);
+    double s_ii = SRUKF_ENTRY(S, i, i);
     P_inv_diag[i] = 1.0 / (s_ii * s_ii + 1e-15);
   }
 
@@ -369,16 +370,26 @@ static int run_stability_test(const test_config_t *cfg) {
   srukf_set_noise(ukf, Qsqrt, Rsqrt);
 
   /* Initial state */
-  SRUKF_ENTRY(ukf->x, 0, 0) = 0.0;  /* x */
-  SRUKF_ENTRY(ukf->x, 1, 0) = 0.0;  /* y */
-  SRUKF_ENTRY(ukf->x, 2, 0) = 10.0; /* vx = 10 m/s */
-  SRUKF_ENTRY(ukf->x, 3, 0) = 0.0;  /* vy */
+  srukf_mat *x0 = srukf_mat_alloc(4, 1, 1);
+  SRUKF_ENTRY(x0, 0, 0) = 0.0;  /* x */
+  SRUKF_ENTRY(x0, 1, 0) = 0.0;  /* y */
+  SRUKF_ENTRY(x0, 2, 0) = 10.0; /* vx = 10 m/s */
+  SRUKF_ENTRY(x0, 3, 0) = 0.0;  /* vy */
+  srukf_set_state(ukf, x0);
+  srukf_mat_free(x0);
 
   /* Initial uncertainty */
-  SRUKF_ENTRY(ukf->S, 0, 0) = 5.0; /* 5m position std */
-  SRUKF_ENTRY(ukf->S, 1, 1) = 5.0;
-  SRUKF_ENTRY(ukf->S, 2, 2) = 2.0; /* 2 m/s velocity std */
-  SRUKF_ENTRY(ukf->S, 3, 3) = 2.0;
+  srukf_mat *S0 = srukf_mat_alloc(4, 4, 1);
+  SRUKF_ENTRY(S0, 0, 0) = 5.0; /* 5m position std */
+  SRUKF_ENTRY(S0, 1, 1) = 5.0;
+  SRUKF_ENTRY(S0, 2, 2) = 2.0; /* 2 m/s velocity std */
+  SRUKF_ENTRY(S0, 3, 3) = 2.0;
+  srukf_set_sqrt_cov(ukf, S0);
+  srukf_mat_free(S0);
+
+  /* Reusable buffers for reading the estimate each step */
+  srukf_mat *x_est = srukf_mat_alloc(4, 1, 1);
+  srukf_mat *S_est = srukf_mat_alloc(4, 4, 1);
 
   /* True state */
   double true_x = 0.0, true_y = 0.0;
@@ -440,9 +451,11 @@ static int run_stability_test(const test_config_t *cfg) {
     }
 
     /* Compute metrics */
-    health_metrics_t health = compute_health(ukf);
+    srukf_get_state(ukf, x_est);
+    srukf_get_sqrt_cov(ukf, S_est);
+    health_metrics_t health = compute_health(x_est, S_est);
     error_metrics_t errors =
-        compute_errors(ukf, true_x, true_y, true_vx, true_vy);
+        compute_errors(x_est, S_est, true_x, true_y, true_vx, true_vy);
 
     /* Record */
     pos_error[step] = errors.position_rmse;
@@ -584,6 +597,8 @@ static int run_stability_test(const test_config_t *cfg) {
   srukf_free(ukf);
   srukf_mat_free(Qsqrt);
   srukf_mat_free(Rsqrt);
+  srukf_mat_free(x_est);
+  srukf_mat_free(S_est);
   free(time);
   free(pos_error);
   free(vel_error);

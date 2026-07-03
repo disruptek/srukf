@@ -33,6 +33,7 @@ CFLAGS      ?= -Wall -Wextra -Wpedantic -O2 -fPIC -I$(SR_DIR) -DHAVE_LAPACK $(PK
 LDFLAGS     ?= $(PKG_LIBS) -lm
 
 LIB_SRCS    := srukf.c
+LIB_PARTS   := $(wildcard src/*.c)
 LIB_HDRS    := srukf.h
 LIB_NAME    := libsrukf.so
 LIB_A       := libsrukf.a
@@ -49,12 +50,13 @@ TEST_LD     := -L$(SR_DIR) -lsrukf -Wl,-rpath,$(SR_DIR) $(LDFLAGS)
 INTERNAL_TESTS := $(basename $(notdir $(shell grep -sl 'include "srukf.c"' $(TEST_DIR)/*.c)))
 
 # shared library target (soname carries the major version, like CMake's)
-$(LIB_NAME): $(LIB_SRCS) $(LIB_HDRS)
+# srukf.c is a single translation unit that #includes src/*.c.
+$(LIB_NAME): $(LIB_SRCS) $(LIB_PARTS) $(LIB_HDRS)
 	$(CC) $(CFLAGS) -shared -Wl,-soname,$(LIB_NAME).$(SRUKF_MAJOR) -o $@ $(LIB_SRCS) $(LDFLAGS)
 	ln -sf $(LIB_NAME) $(LIB_NAME).$(SRUKF_MAJOR)
 
 # static library target
-$(LIB_A): $(LIB_SRCS) $(LIB_HDRS)
+$(LIB_A): $(LIB_SRCS) $(LIB_PARTS) $(LIB_HDRS)
 	$(CC) $(CFLAGS) -c $(LIB_SRCS) -o srukf.o
 	$(AR) rcs $@ srukf.o
 
@@ -63,7 +65,7 @@ $(BIN_DIR):
 
 # Internal tests: compile with srukf.c directly (no library link)
 define INTERNAL_TEST_RULE
-$(BIN_DIR)/$(1).out: $(TEST_DIR)/$(1).c $(LIB_SRCS) $(LIB_HDRS) | $(BIN_DIR)
+$(BIN_DIR)/$(1).out: $(TEST_DIR)/$(1).c $(LIB_SRCS) $(LIB_PARTS) $(LIB_HDRS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $$@ $$< $(LDFLAGS)
 endef
 $(foreach t,$(INTERNAL_TESTS),$(eval $(call INTERNAL_TEST_RULE,$(t))))
@@ -101,7 +103,7 @@ all: lib test
 lib: $(LIB_NAME) $(LIB_A)
 
 format:
-	clang-format -i $(LIB_SRCS) $(LIB_HDRS) $(TEST_SRCS)
+	clang-format -i $(LIB_SRCS) $(LIB_PARTS) $(LIB_HDRS) $(TEST_SRCS)
 
 test: $(TEST_BINS)
 	@failed=0; \

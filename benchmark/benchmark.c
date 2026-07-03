@@ -85,31 +85,55 @@ static void meas_nonlinear(const srukf_mat *x, srukf_mat *z, void *user) {
   }
 }
 
-/* ---------------- Benchmark routines -------------------------------- */
-static void bench_predict(int N, int M, int iters, double *samples,
-                          void (*f)(const srukf_mat *, srukf_mat *, void *)) {
+/* ---------------- Setup helpers ------------------------------------- */
+/* Filter with 0.1 diagonal noise, standard scale, and workspace
+ * pre-allocated -- shared by all benchmark routines. */
+static srukf *make_filter(int N, int M) {
   srukf *ukf = srukf_create(N, M);
-  if (!ukf) {
-    fprintf(stderr, "Failed to create filter\n");
-    return;
-  }
+  if (!ukf)
+    return NULL;
 
-  /* Initialize noise matrices */
   srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
   srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
+  if (!Q || !R) {
+    srukf_mat_free(Q);
+    srukf_mat_free(R);
+    srukf_free(ukf);
+    return NULL;
+  }
   for (int i = 0; i < N; i++)
     SRUKF_ENTRY(Q, i, i) = 0.1;
   for (int i = 0; i < M; i++)
     SRUKF_ENTRY(R, i, i) = 0.1;
   srukf_set_noise(ukf, Q, R);
   srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  srukf_mat_free(Q);
+  srukf_mat_free(R);
+
+  srukf_alloc_workspace(ukf);
+  return ukf;
+}
+
+/* Fill a vector with the ramp 0.1, 0.2, ... used as state/measurement. */
+static void fill_ramp(srukf_mat *v, int n) {
+  for (int i = 0; i < n; i++)
+    SRUKF_ENTRY(v, i, 0) = 0.1 * (i + 1);
+}
+
+/* ---------------- Benchmark routines -------------------------------- */
+static void bench_predict(int N, int M, int iters, double *samples,
+                          void (*f)(const srukf_mat *, srukf_mat *, void *)) {
+  srukf *ukf = make_filter(N, M);
+  if (!ukf) {
+    fprintf(stderr, "Failed to create filter\n");
+    return;
+  }
 
   /* Initialize state */
-  for (int i = 0; i < N; i++)
-    SRUKF_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
-
-  /* Pre-allocate workspace */
-  srukf_alloc_workspace(ukf);
+  srukf_mat *x0 = SRUKF_MAT_ALLOC(N, 1);
+  fill_ramp(x0, N);
+  srukf_set_state(ukf, x0);
+  srukf_mat_free(x0);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
@@ -123,40 +147,25 @@ static void bench_predict(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  srukf_mat_free(Q);
-  srukf_mat_free(R);
   srukf_free(ukf);
 }
 
 static void bench_correct(int N, int M, int iters, double *samples,
                           void (*h)(const srukf_mat *, srukf_mat *, void *)) {
-  srukf *ukf = srukf_create(N, M);
+  srukf *ukf = make_filter(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
   }
 
-  /* Initialize noise matrices */
-  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
-  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
-  for (int i = 0; i < N; i++)
-    SRUKF_ENTRY(Q, i, i) = 0.1;
-  for (int i = 0; i < M; i++)
-    SRUKF_ENTRY(R, i, i) = 0.1;
-  srukf_set_noise(ukf, Q, R);
-  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
+  /* Initialize state and measurement */
+  srukf_mat *x0 = SRUKF_MAT_ALLOC(N, 1);
+  fill_ramp(x0, N);
+  srukf_set_state(ukf, x0);
+  srukf_mat_free(x0);
 
-  /* Initialize state */
-  for (int i = 0; i < N; i++)
-    SRUKF_ENTRY(ukf->x, i, 0) = 0.1 * (i + 1);
-
-  /* Measurement vector */
   srukf_mat *z = SRUKF_MAT_ALLOC(M, 1);
-  for (int i = 0; i < M; i++)
-    SRUKF_ENTRY(z, i, 0) = 0.1 * (i + 1);
-
-  /* Pre-allocate workspace */
-  srukf_alloc_workspace(ukf);
+  fill_ramp(z, M);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
@@ -170,40 +179,24 @@ static void bench_correct(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  srukf_mat_free(Q);
-  srukf_mat_free(R);
   srukf_mat_free(z);
   srukf_free(ukf);
 }
 
 static void bench_predict_to(int N, int M, int iters, double *samples,
                              void (*f)(const srukf_mat *, srukf_mat *, void *)) {
-  srukf *ukf = srukf_create(N, M);
+  srukf *ukf = make_filter(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
   }
 
-  /* Initialize noise matrices */
-  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
-  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
-  for (int i = 0; i < N; i++)
-    SRUKF_ENTRY(Q, i, i) = 0.1;
-  for (int i = 0; i < M; i++)
-    SRUKF_ENTRY(R, i, i) = 0.1;
-  srukf_set_noise(ukf, Q, R);
-  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
-
   /* User-managed state buffers */
   srukf_mat *x = SRUKF_MAT_ALLOC(N, 1);
   srukf_mat *S = SRUKF_MAT_ALLOC(N, N);
-  for (int i = 0; i < N; i++) {
-    SRUKF_ENTRY(x, i, 0) = 0.1 * (i + 1);
+  fill_ramp(x, N);
+  for (int i = 0; i < N; i++)
     SRUKF_ENTRY(S, i, i) = 0.001;
-  }
-
-  /* Pre-allocate workspace */
-  srukf_alloc_workspace(ukf);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
@@ -217,8 +210,6 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  srukf_mat_free(Q);
-  srukf_mat_free(R);
   srukf_mat_free(x);
   srukf_mat_free(S);
   srukf_free(ukf);
@@ -226,37 +217,21 @@ static void bench_predict_to(int N, int M, int iters, double *samples,
 
 static void bench_correct_to(int N, int M, int iters, double *samples,
                              void (*h)(const srukf_mat *, srukf_mat *, void *)) {
-  srukf *ukf = srukf_create(N, M);
+  srukf *ukf = make_filter(N, M);
   if (!ukf) {
     fprintf(stderr, "Failed to create filter\n");
     return;
   }
 
-  /* Initialize noise matrices */
-  srukf_mat *Q = SRUKF_MAT_ALLOC(N, N);
-  srukf_mat *R = SRUKF_MAT_ALLOC(M, M);
-  for (int i = 0; i < N; i++)
-    SRUKF_ENTRY(Q, i, i) = 0.1;
-  for (int i = 0; i < M; i++)
-    SRUKF_ENTRY(R, i, i) = 0.1;
-  srukf_set_noise(ukf, Q, R);
-  srukf_set_scale(ukf, 1e-3, 2.0, 0.0);
-
   /* User-managed state buffers */
   srukf_mat *x = SRUKF_MAT_ALLOC(N, 1);
   srukf_mat *S = SRUKF_MAT_ALLOC(N, N);
-  for (int i = 0; i < N; i++) {
-    SRUKF_ENTRY(x, i, 0) = 0.1 * (i + 1);
+  fill_ramp(x, N);
+  for (int i = 0; i < N; i++)
     SRUKF_ENTRY(S, i, i) = 0.001;
-  }
 
-  /* Measurement vector */
   srukf_mat *z = SRUKF_MAT_ALLOC(M, 1);
-  for (int i = 0; i < M; i++)
-    SRUKF_ENTRY(z, i, 0) = 0.1 * (i + 1);
-
-  /* Pre-allocate workspace */
-  srukf_alloc_workspace(ukf);
+  fill_ramp(z, M);
 
   /* Warmup */
   for (int i = 0; i < WARMUP_ITERS; i++)
@@ -270,8 +245,6 @@ static void bench_correct_to(int N, int M, int iters, double *samples,
     samples[i] = t1 - t0;
   }
 
-  srukf_mat_free(Q);
-  srukf_mat_free(R);
   srukf_mat_free(x);
   srukf_mat_free(S);
   srukf_mat_free(z);

@@ -9,14 +9,12 @@
  * - Zero measurement
  * - Large measurement values
  * - Error handling
+ *
+ * This test includes srukf.c directly: it inspects filter internals
+ * (state and covariance) around each correction.
  * -------------------------------------------------------------------- */
 
-#include <assert.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#include "srukf.h"
+#include "srukf.c"
 
 #define EPS       1e-6
 #define EPS_LOOSE 1e-3
@@ -667,7 +665,8 @@ static void test_correct_to(void) {
   SRUKF_ENTRY(z, 1, 0) = 6.0;
 
   /* Call transactional API */
-  srukf_return rc = srukf_correct_to(ukf, x_user, S_user, z, meas_identity, NULL);
+  srukf_return rc =
+      srukf_correct_to(ukf, x_user, S_user, z, meas_identity, NULL);
   assert(rc == SRUKF_RETURN_OK);
 
   /* Filter state should be unchanged */
@@ -749,7 +748,7 @@ static void test_correct_to_chaining(void) {
     }
 
     srukf_return rc = srukf_correct_to(ukf, x_test, S_test, measurements[i],
-                                     meas_identity, NULL);
+                                       meas_identity, NULL);
     assert(rc == SRUKF_RETURN_OK);
 
     double dx = SRUKF_ENTRY(x_test, 0, 0) - target_x0;

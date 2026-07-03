@@ -77,6 +77,18 @@ build files.** If you find yourself editing the Makefile and
 CMakeLists.txt in the same commit, look for the convention you're
 missing.
 
+### Source Layout
+
+`srukf.c` is a single translation unit that `#include`s the focused
+parts under `src/` (prelude, mat, workspace, weights, lifecycle,
+accessors, sigma, core, predict, correct, diag). This keeps internal
+`static` helpers shared across parts, preserves the
+`#include "srukf.c"` test convention, and leaves both build systems
+pointing at one source file. Include order in `srukf.c` is load-bearing:
+every static function must be defined before its first use. Keep each
+part under ~500 lines; when one outgrows that, split it and add the new
+part to the include list.
+
 ### Python Bindings
 
 ```bash
@@ -108,18 +120,19 @@ All changes must pass the existing test suite. The tests cover:
 | Test file | What it tests |
 |---|---|
 | `00_sigma.c` | Sigma point generation |
-| `01_weights.c`, `02_weights.c` | UKF weight computation |
+| `02_weights.c` | UKF weight computation |
 | `05_correct.c`, `06_predict.c` | Core predict/correct operations |
 | `10_simple.c` | End-to-end linear tracking |
 | `20_nonlinear.c` | Nonlinear system tracking |
 | `30_errors.c` | Error handling and edge cases |
 | `35_numerical.c` | Numerical stability |
 | `40_stress.c` | Long-duration stress tests |
-| `45_accessors.c` | Safe state/covariance access, version, innovation/NIS |
-| `46_edge_cases.c` | Boundary conditions |
+| `45_accessors.c` | State/covariance/scale access, version, innovation/NIS |
+| `46_edge_cases.c` | Boundary conditions, downdate and singular-Syy cases |
 | `47_single_precision.c` | Single-precision (`float`) mode |
 | `48_atomicity.c` | Transactional semantics of predict/correct on error |
-| `49_zeroalloc.c` | Zero heap allocation in the steady-state hot path |
+| `49_zeroalloc.c` | Zero-allocation hot path, deterministic OOM handling |
+| `50_hooks.c` | Custom mean/residual hooks (angle tracking) |
 | `90_cpp_linkage.cpp` | Public header consumable from C++ |
 
 **Run all tests:**

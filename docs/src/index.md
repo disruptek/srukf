@@ -130,15 +130,18 @@ srukf_predict(ukf, process_model, NULL);
 // Correct with measurement z and model h(x) -> z
 srukf_correct(ukf, z, measurement_model, NULL);
 
-// Access state estimate
-srukf_value x0 = SRUKF_ENTRY(ukf->x, 0, 0);
+// Read the state estimate
+srukf_mat *x = srukf_mat_alloc(3, 1, 1);
+srukf_get_state(ukf, x);
+srukf_value x0 = SRUKF_ENTRY(x, 0, 0);
 
+srukf_mat_free(x);
 srukf_free(ukf);
 ```
 
-### Safe State and Covariance Access
+### State and Covariance Access
 
-For production code, use the safe accessor functions instead of direct field access:
+The `srukf` structure is opaque; all access goes through accessors:
 
 ```c
 // Get current state estimate

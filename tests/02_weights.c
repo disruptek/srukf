@@ -1,18 +1,24 @@
-#include <assert.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
+/* --------------------------------------------------------------------
+ * 02_weights.c - Sigma-point weight computation tests
+ *
+ * Verifies the wm/wc weight vectors against the reference formulas for
+ * a range of scaling parameters, including rejected (underflowing)
+ * alphas.  Weights are internal state, so this test includes srukf.c
+ * directly.
+ * -------------------------------------------------------------------- */
 
-#include "srukf.h"
+#include "srukf.c"
 
 /* ---------- helper: compute λ from α, κ, N --------------------- */
-static srukf_value lambda_from(srukf_value alpha, srukf_value kappa, srukf_index N) {
+static srukf_value lambda_from(srukf_value alpha, srukf_value kappa,
+                               srukf_index N) {
   return alpha * alpha * ((srukf_value)N + kappa) - (srukf_value)N;
 }
 
 /* ---------- helper: compute the expected weight vectors ------------- */
-static void expected_weights(srukf_value lambda, srukf_value alpha, srukf_value beta,
-                             srukf_index n, srukf_value *wm, srukf_value *wc) {
+static void expected_weights(srukf_value lambda, srukf_value alpha,
+                             srukf_value beta, srukf_index n, srukf_value *wm,
+                             srukf_value *wc) {
   srukf_index n_sigma = 2 * n + 1;
   srukf_value denom = (srukf_value)n + lambda;
 
@@ -172,6 +178,25 @@ static void test_small_alpha(void) {
   srukf_free(ukf);
 }
 
+/* ---------- test 6 – small-but-representable α is accepted -------- */
+/* α = 1e-6 gives n + λ = 6e-12: near the precision floor but still
+ * representable, so it must be ACCEPTED and produce finite weights. */
+static void test_small_alpha_accepted(void) {
+  srukf *ukf = srukf_create(6, 1);
+  assert(ukf && ukf->x);
+
+  int rc = srukf_set_scale(ukf, 1e-6, 2.0, 0.0);
+  assert(rc == SRUKF_RETURN_OK);
+  assert(ukf->wm && ukf->wc);
+
+  for (srukf_index i = 0; i < 2 * ukf->x->n_rows + 1; ++i) {
+    assert(isfinite(ukf->wm[i]));
+    assert(isfinite(ukf->wc[i]));
+  }
+
+  srukf_free(ukf);
+}
+
 /* ---------- main – run all tests -------------------------------- */
 int main(void) {
   test_standard();
@@ -188,6 +213,9 @@ int main(void) {
 
   test_small_alpha();
   printf("  test_small_alpha  OK\n");
+
+  test_small_alpha_accepted();
+  printf("  test_small_alpha_ok OK\n");
 
   printf("compute_weights tests passed.\n");
   return 0;

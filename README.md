@@ -243,15 +243,20 @@ srukf_predict(ukf, process_model, NULL);
 // Correct with measurement z and model h(x) -> z
 srukf_correct(ukf, z, measurement_model, NULL);
 
-// Access state estimate
-srukf_value x0 = SRUKF_ENTRY(ukf->x, 0, 0);
+// Read the state estimate
+srukf_mat *x = srukf_mat_alloc(3, 1, 1);
+srukf_get_state(ukf, x);
+srukf_value x0 = SRUKF_ENTRY(x, 0, 0);
 
+srukf_mat_free(x);
 srukf_free(ukf);
 ```
 
-### Safe State and Covariance Access
+The `srukf` structure is opaque; all state access goes through accessor
+functions, which keeps the ABI stable for bindings and dynamically
+linked consumers.
 
-For production code, use the safe accessor functions instead of direct field access:
+### State and Covariance Access
 
 ```c
 // Get current state estimate
@@ -272,6 +277,36 @@ srukf_reset(ukf, 1.0);  // init_std = 1.0
 srukf_mat_free(x_out);
 srukf_mat_free(S_out);
 ```
+
+### Innovation Monitoring and Gating
+
+After each successful correct step, the innovation, its
+sqrt-covariance, and the normalized innovation squared (NIS) are
+available for filter-health monitoring and measurement gating:
+
+```c
+srukf_correct(ukf, z, h, NULL);
+
+srukf_value nis;
+srukf_get_nis(ukf, &nis);  // chi-square with M degrees of freedom
+```
+
+To gate a measurement *before* accepting it, run `srukf_correct_to()`
+on scratch buffers and inspect the NIS; commit with `srukf_set_state()`
+/ `srukf_set_sqrt_cov()` only if it passes.
+
+### Angles and Other Non-Euclidean States
+
+States or measurements containing angles break Euclidean averaging at
+the ±π wrap. Register mean/residual hooks to fix the statistics:
+
+```c
+srukf_set_state_ops(ukf, angle_mean, angle_residual, NULL);
+srukf_set_meas_ops(ukf, angle_mean, angle_residual, NULL);
+```
+
+See `tests/50_hooks.c` for a complete angle-tracking example with
+circular mean and wrapped residual implementations.
 
 ### Tuning UKF Parameters
 
@@ -321,8 +356,13 @@ if (status == SRUKF_RETURN_OK) {
   // invalid parameters
 } else if (status == SRUKF_RETURN_MATH_ERROR) {
   // numerical/mathematical error
+} else if (status == SRUKF_RETURN_MEMORY_ERROR) {
+  // allocation failure
 }
 ```
+
+On any error from `srukf_predict()`/`srukf_correct()`, the filter state
+is unchanged — a failed step never commits partial results.
 
 ### Workspace Management
 
@@ -340,134 +380,37 @@ srukf_correct(ukf, z, h, NULL);
 srukf_free_workspace(ukf);
 ```
 
-## API Reference
+## API Overview
 
-### Types and Enumerations
+The complete, always-current reference lives in `srukf.h` (every
+function is documented there) and at
+**https://disruptek.github.io/srukf/**. The API groups:
 
-```c
-typedef double srukf_value;      // Scalar type (float if SRUKF_SINGLE)
-typedef size_t srukf_index;      // Index/size type
+| Group | Functions |
+|-------|-----------|
+| Lifecycle | `srukf_create`, `srukf_create_from_noise`, `srukf_free` |
+| Configuration | `srukf_set_noise`, `srukf_set_scale`, `srukf_get_scale` |
+| State access | `srukf_get_state`/`srukf_set_state`, `srukf_get_sqrt_cov`/`srukf_set_sqrt_cov`, `srukf_reset`, `srukf_state_dim`, `srukf_meas_dim` |
+| Core operations | `srukf_predict`, `srukf_correct` |
+| Transactional | `srukf_predict_to`, `srukf_correct_to` (operate on user buffers) |
+| Innovation | `srukf_get_innovation`, `srukf_get_innovation_sqrt_cov`, `srukf_get_nis` |
+| Custom spaces | `srukf_set_state_ops`, `srukf_set_meas_ops` (angle/quaternion support) |
+| Workspace | `srukf_alloc_workspace`, `srukf_free_workspace` |
+| Diagnostics | `srukf_set_diag` (per-instance), `srukf_set_diag_callback` (global) |
+| Matrices | `srukf_mat_alloc`, `srukf_mat_free`, `SRUKF_ENTRY`, `SRUKF_MAT_ALLOC` |
+| Version | `srukf_version`, `SRUKF_VERSION` |
 
-// Return codes
-typedef enum {
-  SRUKF_RETURN_OK = 0,           // Success
-  SRUKF_RETURN_PARAMETER_ERROR,  // Invalid parameter
-  SRUKF_RETURN_MATH_ERROR        // Numerical error
-} srukf_return;
-
-// Matrix type flags (bitwise)
-typedef enum {
-  SRUKF_TYPE_COL_MAJOR = 0x01,   // Column-major storage
-  SRUKF_TYPE_NO_DATA = 0x02,     // Descriptor without data
-  SRUKF_TYPE_VECTOR = 0x04,      // Single-column vector
-  SRUKF_TYPE_SQUARE = 0x08       // Square matrix
-} srukf_mat_type;
-
-// Matrix structure
-typedef struct {
-  srukf_index n_cols, n_rows;    // Columns, rows
-  srukf_index inc_row, inc_col;  // Strides
-  srukf_value *data;             // Data pointer
-  srukf_mat_type type;           // Type flags
-} srukf_mat;
-
-// Filter structure
-typedef struct {
-  srukf_mat *x;                  // State estimate (N x 1)
-  srukf_mat *S;                  // Sqrt covariance (N x N)
-  srukf_mat *Qsqrt;              // Process noise sqrt-cov
-  srukf_mat *Rsqrt;              // Measurement noise sqrt-cov
-  srukf_value alpha, beta, kappa; // UKF parameters
-  srukf_value lambda;            // Computed scaling
-  srukf_value *wm, *wc;          // Weights (2N+1 each)
-  srukf_workspace *ws;           // Workspace (internal)
-} srukf;
-```
-
-### Matrix Operations
-
-```c
-srukf_mat *srukf_mat_alloc(srukf_index rows, srukf_index cols, int alloc_data);
-void srukf_mat_free(srukf_mat *mat);
-
-// Convenience macros
-#define SRUKF_MAT_ALLOC(rows, cols)         srukf_mat_alloc((rows), (cols), 1)
-#define SRUKF_MAT_ALLOC_NO_DATA(rows, cols) srukf_mat_alloc((rows), (cols), 0)
-
-// Element access (column-major)
-#define SRUKF_ENTRY(A, i, j) ((A)->data[(i)*(A)->inc_row + (j)*(A)->inc_col])
-```
-
-### Filter Lifecycle
-
-```c
-// Create filter
-srukf *srukf_create(int N, int M);
-srukf *srukf_create_from_noise(const srukf_mat *Qsqrt, const srukf_mat *Rsqrt);
-
-// Initialize/configure
-srukf_return srukf_set_noise(srukf *ukf, const srukf_mat *Qsqrt, const srukf_mat *Rsqrt);
-srukf_return srukf_set_scale(srukf *ukf, srukf_value alpha, srukf_value beta, srukf_value kappa);
-
-// Cleanup
-void srukf_free(srukf *ukf);
-```
-
-### State Access
-
-```c
-// Dimension queries
-srukf_index srukf_state_dim(const srukf *ukf);
-srukf_index srukf_meas_dim(const srukf *ukf);
-
-// Safe state/covariance access
-srukf_return srukf_get_state(const srukf *ukf, srukf_mat *x_out);
-srukf_return srukf_set_state(srukf *ukf, const srukf_mat *x_in);
-srukf_return srukf_get_sqrt_cov(const srukf *ukf, srukf_mat *S_out);
-srukf_return srukf_set_sqrt_cov(srukf *ukf, const srukf_mat *S_in);
-
-// Reset to initial conditions
-srukf_return srukf_reset(srukf *ukf, srukf_value init_std);
-```
-
-### Core Operations
-
-```c
-// Atomic predict/correct (updates filter state in-place)
-srukf_return srukf_predict(srukf *ukf,
-                           void (*f)(const srukf_mat *, srukf_mat *, void *),
-                           void *user);
-srukf_return srukf_correct(srukf *ukf, srukf_mat *z,
-                           void (*h)(const srukf_mat *, srukf_mat *, void *),
-                           void *user);
-
-// Transactional predict/correct (operates on user-provided buffers)
-srukf_return srukf_predict_to(srukf *ukf, srukf_mat *x, srukf_mat *S,
-                              void (*f)(const srukf_mat *, srukf_mat *, void *),
-                              void *user);
-srukf_return srukf_correct_to(srukf *ukf, srukf_mat *x, srukf_mat *S, srukf_mat *z,
-                              void (*h)(const srukf_mat *, srukf_mat *, void *),
-                              void *user);
-```
-
-### Workspace Management
-
-```c
-srukf_return srukf_alloc_workspace(srukf *ukf);
-void srukf_free_workspace(srukf *ukf);
-```
-
-### Diagnostics
-
-```c
-typedef void (*srukf_diag_fn)(const char *msg);
-void srukf_set_diag_callback(srukf_diag_fn fn);
-```
+All fallible functions return `srukf_return`: `SRUKF_RETURN_OK`,
+`SRUKF_RETURN_PARAMETER_ERROR`, `SRUKF_RETURN_MATH_ERROR`, or
+`SRUKF_RETURN_MEMORY_ERROR`.
 
 ## Limitations
 
-- **Not thread-safe**. The diagnostic callback is global; each filter instance
-  should be used from a single thread.
+- **One thread per filter instance.** Distinct instances may run on
+  different threads concurrently; give each a per-instance diagnostic
+  handler via `srukf_set_diag()`. The optional global callback
+  (`srukf_set_diag_callback()`) is shared and only safe when set once
+  before threads start.
 - **Noise matrices must be square-roots**. Provide S where P = S*S', not P directly.
 - **Column-major layout**. All matrices must be in column-major (Fortran) order.
 

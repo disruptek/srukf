@@ -17,6 +17,7 @@ Quick start::
 from .core import (
     SrukfError,
     SrukfMathError,
+    SrukfMemoryError,
     SrukfParameterError,
     UnscentedKalmanFilter,
     lib_version,
@@ -28,6 +29,7 @@ __all__ = [
     "SrukfError",
     "SrukfParameterError",
     "SrukfMathError",
+    "SrukfMemoryError",
     "lib_version",
     "__version__",
     "__version_info__",

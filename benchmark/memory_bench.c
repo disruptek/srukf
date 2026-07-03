@@ -14,15 +14,18 @@
 /* ---------------- Memory calculation -------------------------------- */
 
 /* Calculate theoretical memory usage for a filter of given dimensions.
- * This matches the allocations in srukf.c exactly. */
+ * This matches the allocations in srukf.c (up to the opaque struct
+ * estimates). */
 static size_t calc_filter_memory(int N, int M) {
   size_t n_sigma = 2 * N + 1;
   size_t val_size = sizeof(srukf_value);
   size_t mat_struct = sizeof(srukf_mat);
   size_t total = 0;
 
-  /* Filter struct itself */
-  total += sizeof(srukf);
+  /* Filter struct itself (opaque; pointers + tuning parameters come to
+   * roughly 160 bytes on 64-bit -- an estimate in the same spirit as
+   * the workspace struct below) */
+  total += 160;
 
   /* Core matrices (x, S, Qsqrt, Rsqrt) */
   total += mat_struct + N * 1 * val_size; /* x: N x 1 */
@@ -67,8 +70,8 @@ static size_t calc_workspace_memory(int N, int M) {
   /* SR-UKF specific */
   total += mat_struct + N * n_sigma * val_size; /* Dev_N: N x (2N+1) */
   total += mat_struct + M * n_sigma * val_size; /* Dev_M: M x (2N+1) */
-  total += mat_struct + (n_sigma + N + 1) * N * val_size; /* qr_work_N */
-  total += mat_struct + (n_sigma + M + 1) * M * val_size; /* qr_work_M */
+  total += mat_struct + (n_sigma + N) * N * val_size; /* qr_work_N */
+  total += mat_struct + (n_sigma + M) * M * val_size; /* qr_work_M */
   total += mat_struct + M * M * val_size;                 /* Syy: M x M */
 
   /* Small buffers */

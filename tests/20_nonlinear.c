@@ -37,7 +37,8 @@ static void debugprintf(const char *fmt __attribute__((unused)), ...) {
  * -------------------------------------------------------------------- */
 static void nonlinear_process(const srukf_mat *x, srukf_mat *xp, void *user) {
   (void)user; /* unused */
-  SRUKF_ENTRY(xp, 0, 0) = SRUKF_ENTRY(x, 0, 0) + 0.1 * sin(SRUKF_ENTRY(x, 1, 0));
+  SRUKF_ENTRY(xp, 0, 0) =
+      SRUKF_ENTRY(x, 0, 0) + 0.1 * sin(SRUKF_ENTRY(x, 1, 0));
   SRUKF_ENTRY(xp, 1, 0) =
       SRUKF_ENTRY(x, 1, 0) + 0.05 * SRUKF_ENTRY(x, 2, 0) * SRUKF_ENTRY(x, 2, 0);
   SRUKF_ENTRY(xp, 2, 0) = SRUKF_ENTRY(x, 2, 0);
@@ -119,7 +120,7 @@ int main(void) {
   assert(srukf_predict(ukf, nonlinear_process, NULL) == SRUKF_RETURN_OK);
   for (size_t i = 0; i < 3; ++i)
     assert(fabs(SRUKF_ENTRY(ukf->x, i, 0)) < 1e-6); /* relaxed tolerance
-                                                   */
+                                                     */
   /* Covariance must be SPD after prediction */
   assert(is_sqrt_valid(ukf->S));
 
